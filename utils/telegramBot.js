@@ -285,7 +285,8 @@ const commandMappings = {
     }
     await commandHandlers.sendMainMenu(chatId);
   }, 'start'),
-  '/play': safeCommandHandler(commandHandlers.play, 'play'),
+  // aa
+  '/play': safeCommandHandler(commandHandlers.play, 'play'), 
   '/register': safeCommandHandler(commandHandlers.register, 'register'),
   '/balance': safeCommandHandler(commandHandlers.checkBalance, 'balance'),
   '/deposit': safeCommandHandler(commandHandlers.deposit, 'deposit'),
