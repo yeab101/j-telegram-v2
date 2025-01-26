@@ -18,7 +18,7 @@ const userSchema = new Schema({
     },
     balance: {
         type: Number,
-        default: 100,
+        default: 10,
     },
     firstname: {
         type: String,
