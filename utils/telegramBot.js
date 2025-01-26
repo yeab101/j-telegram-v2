@@ -82,49 +82,37 @@ const commandHandlers = {
     await adminHandler.checkAdminStatus(chatId, bot);
   },
 
-  // // Game related handlers
-  // play: async (chatId) => {
-  //   try {
-  //     // Check if user exists in database
-  //     const user = await User.findOne({ chatId });
+  // Game related handlers
+  play: async (chatId) => {
+    try {
+      // Check if user exists in database
+      const user = await User.findOne({ chatId });
 
-  //     if (!user) {
-  //       return bot.sendMessage(
-  //         chatId,
-  //         "⚠️ Please register first /register to start playing."
-  //       );
-  //     }
+      if (!user) {
+        return bot.sendMessage(
+          chatId,
+          "⚠️ Please register first /register to start playing."
+        );
+      }
 
-  //     // If user exists, proceed with sending game options
-  //     await bot.sendMessage(chatId, "🎮 Best of luck on your gaming adventure!", {
-  //       reply_markup: {
-  //         inline_keyboard: [
-  //           [
-  //             { text: "🎮 Play 5", web_app: { url: `${baseUrl}/board/5/${chatId}` } }
-  //           ],
-  //           [
-  //             { text: "🎮 Play 10", web_app: { url: `${baseUrl}/board/10/${chatId}` } },
-  //             { text: "🎮 Play 20", web_app: { url: `${baseUrl}/board/20/${chatId}` } }
-  //           ],
-  //           [
-  //             { text: "🎮 Play 50", web_app: { url: `${baseUrl}/board/50/${chatId}` } },
-  //             { text: "🎮 Play 100", web_app: { url: `${baseUrl}/board/100/${chatId}` } }
-  //           ],
-  //           [
-  //             { text: "🎮 Play 200", web_app: { url: `${baseUrl}/board/200/${chatId}` } }
-  //           ],
-
-  //         ]
-  //       }
-  //     });
-  //   } catch (error) {
-  //     console.error('Error in play handler:', error);
-  //     await bot.sendMessage(
-  //       chatId,
-  //       "❌ Sorry, something went wrong. Please try again later."
-  //     );
-  //   }
-  // },
+      // If user exists, proceed with sending game options
+      await bot.sendMessage(chatId, "🎮 Best of luck on your gaming adventure!", {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "Play 🎮", web_app: { url: `${baseUrl}/room?token=${chatId}` } }
+            ]
+          ]
+        }
+      });
+    } catch (error) {
+      console.error('Error in play handler:', error);
+      await bot.sendMessage(
+        chatId,
+        "❌ Sorry, something went wrong. Please try again later."
+      );
+    }
+  },
 
   // User account handlers
   register: async (chatId) => {
@@ -236,20 +224,7 @@ const commandHandlers = {
       await transactionHandlers.withdraw(chatId, bot);
     })(chatId);
   },
-
-//   // Information handlers
-//   instructions: async (chatId) => {
-//     const instructions = `
-// 🎮 How to Play Joker Bingo:
-
-// 1. Register with your phone number
-// 2. Deposit funds to your account
-// 3. Choose your bet amount
-// 4. Match numbers on your board
-// 5. Win when you complete a pattern! 
-// `;
-//     await bot.sendMessage(chatId, instructions);
-//   },
+ 
 
   transfer: async (chatId) => {
     await safeCommandHandler(async () => {
@@ -314,8 +289,7 @@ const commandMappings = {
   '/register': safeCommandHandler(commandHandlers.register, 'register'),
   '/balance': safeCommandHandler(commandHandlers.checkBalance, 'balance'),
   '/deposit': safeCommandHandler(commandHandlers.deposit, 'deposit'),
-  '/withdraw': safeCommandHandler(commandHandlers.withdraw, 'withdraw'),
-  '/instructions': safeCommandHandler(commandHandlers.instructions, 'instructions'),
+  '/withdraw': safeCommandHandler(commandHandlers.withdraw, 'withdraw'), 
   '/transfer': safeCommandHandler(commandHandlers.transfer, 'transfer'),
   '/history': safeCommandHandler(commandHandlers.history, 'history'),
   '/winners': safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),
@@ -334,12 +308,11 @@ Object.entries(commandMappings).forEach(([command, handler]) => {
 });
 
 const callbackActions = {
-  // play: safeCommandHandler(commandHandlers.play, 'play'),
+  play: safeCommandHandler(commandHandlers.play, 'play'),
   register: safeCommandHandler(commandHandlers.register, 'register'),
   balance: safeCommandHandler(commandHandlers.checkBalance, 'balance'),
   deposit: safeCommandHandler(commandHandlers.deposit, 'deposit'),
-  withdraw: safeCommandHandler(commandHandlers.withdraw, 'withdraw'),
-  instructions: safeCommandHandler(commandHandlers.instructions, 'instructions'),
+  withdraw: safeCommandHandler(commandHandlers.withdraw, 'withdraw'), 
   transfer: safeCommandHandler(commandHandlers.transfer, 'transfer'),
   history: safeCommandHandler(commandHandlers.history, 'history'),
   gamesHistory: safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),
