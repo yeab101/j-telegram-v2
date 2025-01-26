@@ -120,88 +120,103 @@ const commandHandlers = {
     session.startTransaction();
 
     try {
-      const existingUser = await User.findOne({ chatId }).session(session);
-      if (existingUser) {
-        await bot.sendMessage(chatId, "You are already registered! Use /play to start playing.");
-        if (global.pendingReferrals?.[chatId]) {
-          delete global.pendingReferrals[chatId];
-        }
-        return;
-      }
-
-      await bot.sendMessage(chatId, "Please enter your phone number (starting with '09'):");
-      bot.once('message', async (msg) => {
-        const phoneNumber = msg.text;
-        const phoneRegex = /^09\d{8}$/;
-
-        if (!phoneRegex.test(phoneNumber)) {
-          await bot.sendMessage(chatId, "Ensure phone number is 10 digits and starts with '09xxxxxxxx'.");
-          return;
-        }
-
-        const username = msg.from.username;
-        if (!username) {
-          await bot.sendMessage(chatId, "Username is required. Please set a username in your Telegram settings and try again.");
-          return;
-        }
-
-        try {
-          // Check for pending referral
-          if (global.pendingReferrals && global.pendingReferrals[chatId]) {
-            const inviterChatId = global.pendingReferrals[chatId];
-
-            // Verify inviter exists and is not the same as new user
-            if (inviterChatId === chatId) {
-              delete global.pendingReferrals[chatId];
-              await bot.sendMessage(chatId, "Self-referral is not allowed.");
-              return;
+        const existingUser = await User.findOne({ chatId }).session(session);
+        if (existingUser) {
+            await bot.sendMessage(chatId, "You are already registered! Use /play to start playing.");
+            if (global.pendingReferrals?.[chatId]) {
+                delete global.pendingReferrals[chatId];
             }
+            await session.commitTransaction();
+            return;
+        }
 
-            const inviter = await User.findOne({ chatId: inviterChatId }).session(session);
-            if (inviter) {
-              // Create new user with referral info
-              const user = new User({
-                chatId: chatId,
-                phoneNumber: phoneNumber,
-                username: username,
-                referredBy: inviterChatId
-              });
-              await user.save();
+        // Set up message collector with timeout
+        const messagePromise = new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Registration timeout'));
+            }, 300000); // 5 minutes timeout
 
-              // // Update inviter's stats and balance
-              inviter.referralCount += 1;
-              inviter.balance += 10;
-              await inviter.save();
-
-              // Notify inviter
-              await bot.sendMessage(inviterChatId,
-                `🎉 Congratulations! You received 10 birr bonus balance for inviting a new user!`
-              );
-            }
-
-            // Clean up the pending referral
-            delete global.pendingReferrals[chatId];
-          } else {
-            // Regular registration without referral
-            const user = new User({
-              chatId: chatId,
-              phoneNumber: phoneNumber,
-              username: username
+            bot.once('message', async (msg) => {
+                clearTimeout(timeout);
+                resolve(msg);
             });
-            await user.save();
-          }
+        });
 
-          await bot.sendMessage(chatId, "You are now registered! /deposit or /play");
+        await bot.sendMessage(chatId, "Please enter your phone number (starting with '09'):");
+        
+        try {
+            const msg = await messagePromise;
+            const phoneNumber = msg.text;
+            const username = msg.from.username;
+
+            if (!username) {
+                await bot.sendMessage(chatId, "Username is required. Please set a username in your Telegram settings and try again.");
+                await session.abortTransaction();
+                return;
+            }
+
+            // Handle referral logic with proper transaction
+            if (global.pendingReferrals?.[chatId]) {
+                const inviterChatId = global.pendingReferrals[chatId];
+
+                if (inviterChatId === chatId) {
+                    delete global.pendingReferrals[chatId];
+                    await bot.sendMessage(chatId, "Self-referral is not allowed.");
+                    await session.abortTransaction();
+                    return;
+                }
+
+                const inviter = await User.findOne({ chatId: inviterChatId }).session(session);
+                if (inviter) {
+                    const user = new User({
+                        chatId,
+                        phoneNumber,
+                        username,
+                        referredBy: inviterChatId
+                    });
+                    await user.save({ session });
+
+                    inviter.referralCount += 1;
+                    inviter.balance += 10;
+                    await inviter.save({ session });
+
+                    await session.commitTransaction();
+                    
+                    // Send notifications after transaction commits
+                    await bot.sendMessage(inviterChatId,
+                        `🎉 Congratulations! You received 10 birr bonus balance for inviting a new user!`
+                    );
+                    await bot.sendMessage(chatId, "Registration successful! Use /deposit to add funds or /play to start playing.");
+                }
+            } else {
+                const user = new User({
+                    chatId,
+                    phoneNumber,
+                    username
+                });
+                await user.save({ session });
+                await session.commitTransaction();
+                await bot.sendMessage(chatId, "Registration successful! Use /deposit to add funds or /play to start playing.");
+            }
+
+            delete global.pendingReferrals?.[chatId];
+
         } catch (error) {
-          console.error("Error handling registration:", error);
-          bot.sendMessage(chatId, "There was an error processing your registration. Please try again.");
+            await session.abortTransaction();
+            if (error.message === 'Registration timeout') {
+                await bot.sendMessage(chatId, "Registration timed out. Please try again using /register");
+            } else {
+                console.error("Registration error:", error);
+                await bot.sendMessage(chatId, "There was an error processing your registration. Please try again.");
+            }
         }
-      });
+
     } catch (error) {
-      await session.abortTransaction();
-      throw error;
+        await session.abortTransaction();
+        console.error("Session error:", error);
+        await bot.sendMessage(chatId, "An unexpected error occurred. Please try again.");
     } finally {
-      session.endSession();
+        session.endSession();
     }
   },
   checkBalance: async (chatId) => {
@@ -338,12 +353,22 @@ const callbackActions = {
 
 };
 
-// Improved callback query handler
+// Improved callback query handler with error recovery
 const handleCallbackQuery = async (callbackQuery) => {
   const chatId = callbackQuery.message.chat.id;
   const data = callbackQuery.data;
 
   try {
+    // Try to answer callback query first with a short timeout
+    try {
+      await bot.answerCallbackQuery(callbackQuery.id, { timeout: 1000 });
+    } catch (error) {
+      // Ignore timeout errors for old queries
+      if (!error.message.includes('query is too old')) {
+        console.error('Callback answer error:', error);
+      }
+    }
+
     // Handle approval/rejection actions
     if (data.startsWith('approve_') || data.startsWith('reject_')) {
       const [action, ...params] = data.split('_');
@@ -357,23 +382,34 @@ const handleCallbackQuery = async (callbackQuery) => {
       await handler(chatId);
     } else {
       console.log(`Unhandled callback data: ${data}`);
-      // Send a message to user for unhandled callbacks
       await bot.sendMessage(chatId, "This action is currently not available. Please try again later.");
     }
 
-    await bot.answerCallbackQuery(callbackQuery.id);
   } catch (error) {
     console.error('Callback query error:', error);
-    await bot.sendMessage(chatId, "❌ An error occurred. Please try again.");
-    await bot.answerCallbackQuery(callbackQuery.id, {
-      text: "Operation failed. Please try again.",
-      show_alert: true
-    });
+    
+    // Don't let single user errors crash the entire bot
+    try {
+      await bot.sendMessage(chatId, "❌ An error occurred. Please try again.");
+    } catch (msgError) {
+      console.error('Error sending error message:', msgError);
+    }
   }
 };
 
 // Register callback query handler
 bot.on('callback_query', handleCallbackQuery);
+
+// Add error handler for the bot
+bot.on('polling_error', (error) => {
+  console.error('Polling error:', error);
+  // Continue polling despite errors
+});
+
+bot.on('error', (error) => {
+  console.error('Bot error:', error);
+  // Continue operation despite errors
+});
 
 // Cleanup interval for expired locks
 setInterval(() => {
