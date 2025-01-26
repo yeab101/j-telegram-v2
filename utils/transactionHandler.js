@@ -39,7 +39,7 @@ bFpzTyPzIa0JE/MULNEx0rjnia3FntuoiA==
 
 const GATEWAY_MERCHANT_ID = process.env.GATEWAY_MERCHANT_ID;
 const client = new SantimpaySdk(GATEWAY_MERCHANT_ID, PRIVATE_KEY_IN_PEM);
-const notifyUrl = "https://https://jbackend-v2.onrender.com/api/callback/verify-transaction";
+const notifyUrl = "https://jbackend-v2.onrender.com/api/callback/verify-transaction";
 // const notifyUrlWithdraw = "https://joker-bingo-backend.onrender.com/api/callback/verify-transaction/withdraw";
 
 const getValidInput = async (bot, chatId, prompt, validator) => {
