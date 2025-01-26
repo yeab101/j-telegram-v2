@@ -68,10 +68,10 @@ const commandHandlers = {
       caption: "Welcome to Joker Bingo! Choose an option below.",
       reply_markup: {
         inline_keyboard: [
-          [{ text: "Play 🎮", web_app: { url: `${baseUrl}/room?token=${chatId}` } }, { text: "Register 👤", callback_data: "register" }],
+          [{ text: "Play 🎮", web_app: { url: `${baseUrl}/room?token=${chatId}` } }, { text: "Register 👤", callback_data: "register" }, { text: "Join Group ", url: "https://t.me/jokerbingo_bot_group" }],
           [{ text: "Deposit 💸", callback_data: "deposit" }, { text: "Withdraw 💁‍♂️", callback_data: "withdraw" }, { text: "Transfer 💳", callback_data: "transfer" }],
-          [{ text: "Balance 💰", callback_data: "balance" }, { text: "Winners 🎉", callback_data: "gamesHistory" }, { text: "Transactions 📜", callback_data: "history" } ],
-          [{ text: "Join Group ", url: "https://t.me/jokerbingo_bot_group" }, { text: "Invite Friends 🎁", callback_data: "getRefLink" }],
+          [{ text: "Balance 💰", callback_data: "balance" }, { text: "Winners 🎉", callback_data: "gamesHistory" }, { text: "Transactions", callback_data: "history" } ],
+          [ { text: "Invite Friends 🎁", callback_data: "getRefLink" }],
  
         ]
       }
@@ -319,6 +319,10 @@ const callbackActions = {
   gamesHistory: safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),
   getRefLink: safeCommandHandler(commandHandlers.getRefLink, 'getRefLink'),
   showFriends: safeCommandHandler(commandHandlers.showFriends, 'showFriends'),
+  // Add withdrawal method handlers
+  telebirr_withdraw: safeCommandHandler(async (chatId) => {
+    await transactionHandlers.handleTelebirrWithdraw(chatId, bot);
+  }, 'telebirr_withdraw'),
 
   // Add admin callback handlers 
   admin_settings: adminHandler.handleGameSettings,
@@ -343,18 +347,18 @@ const handleCallbackQuery = async (callbackQuery) => {
     // Handle approval/rejection actions
     if (data.startsWith('approve_') || data.startsWith('reject_')) {
       const [action, ...params] = data.split('_');
-      const handler = callbackActions[`${action}_withdrawal`];
-      if (handler) {
-        await handler(chatId, params.join('_'));
-      }
+      await transactionHandlers.handleWithdrawalResponse(chatId, action, params.join('_'), bot);
       return;
     }
+
     // Handle regular actions
     const handler = callbackActions[data];
     if (handler) {
-      await handler(chatId, bot);
+      await handler(chatId);
     } else {
       console.log(`Unhandled callback data: ${data}`);
+      // Send a message to user for unhandled callbacks
+      await bot.sendMessage(chatId, "This action is currently not available. Please try again later.");
     }
 
     await bot.answerCallbackQuery(callbackQuery.id);

@@ -82,30 +82,6 @@ const getValidInput = async (bot, chatId, prompt, validator) => {
     }
 };
 
-const processTransaction = async (user, amount, type) => {
-    const session = await User.startSession();
-    session.startTransaction();
-
-    try {
-        const currentUser = await User.findOne({ chatId: user.chatId }).session(session);
-
-        if (type === 'withdraw' || type === 'transfer') {
-            if (currentUser.balance < amount) {
-                throw new Error('Insufficient balance');
-            }
-            currentUser.balance -= Number(amount);
-        }
-
-        await currentUser.save({ session });
-        await session.commitTransaction();
-        return true;
-    } catch (error) {
-        await session.abortTransaction();
-        throw error;
-    } finally {
-        session.endSession();
-    }
-};
 
 const transactionHandlers = {
     deposit: async (chatId, bot) => {
@@ -219,33 +195,8 @@ const transactionHandlers = {
                 return;
             }
 
-            // Add Telebirr button first
-            const paymentMethodMsg = await bot.sendMessage(chatId, "Select payment method:", {
-                reply_markup: {
-                    inline_keyboard: [[
-                        { text: "Telebirr 📱", callback_data: "telebirr_withdraw" }
-                    ]]
-                }
-            });
 
-            // Wait for button click
-            try {
-                await new Promise((resolve, reject) => {
-                    const callbackHandler = (callbackQuery) => {
-                        if (callbackQuery.message.chat.id === chatId &&
-                            callbackQuery.data === "telebirr_withdraw") {
-                            bot.removeListener('callback_query', callbackHandler);
-                            resolve();
-                        }
-                    };
-                    bot.on('callback_query', callbackHandler);
-                    setTimeout(() => reject(new Error('Timeout')), 60000);
-                });
-            } catch (error) {
-                await bot.sendMessage(chatId, "⏰ Withdrawal cancelled due to timeout.");
-                return;
-            }
-
+            
             // Rest of the withdraw logic
             let amount = await getValidInput(
                 bot,
@@ -257,20 +208,11 @@ const transactionHandlers = {
                 }
             );
 
-            if (!amount) {
-                return;
-            }
+            if (!amount) return;
 
-
-            await bot.sendMessage(chatId, "Please wait, processing your withdrawal... ⏳");
-            await bot.sendMessage(1982046925, `✅ Withdrawal request from @${user.username || chatId} for ${amount} ETB`);
-            await bot.sendMessage(415285189, `✅Withdrawal request from @${user.username || chatId} for ${amount} ETB`); 
-            await bot.sendMessage(923117728, `✅Withdrawal request from @${user.username || chatId} for ${amount} ETB`); 
-
-            // Process withdrawal with transaction lock
-            const success = await processTransaction(user, amount, 'withdraw');
-            if (!success) {
-                await bot.sendMessage(chatId, "Withdrawal failed. Please try again.");
+            // Add balance check
+            if (user.balance < parseFloat(amount)) {
+                await bot.sendMessage(chatId, "❌ Insufficient balance for withdrawal.");
                 return;
             }
 
@@ -282,23 +224,39 @@ const transactionHandlers = {
                 return;
             }
 
-            const paymentMethod = "Telebirr";
-            // custom ID used by merchant to identify the payment
+            // Create transaction record first
             const id = Math.floor(Math.random() * 1000000000).toString();
-
             const transactionNew = new Finance({
                 transactionId: id,
                 chatId: chatId,
                 amount: amount,
                 status: "PENDING_APPROVAL",
                 type: 'withdrawal',
-                paymentMethod
-            })
-            transactionNew.save();
+                paymentMethod: "Telebirr"
+            });
+
+            // Update user balance
+            user.balance -= parseFloat(amount);
+            
+            // Save both transaction and user update
+            await Promise.all([
+                transactionNew.save(),
+                user.save()
+            ]);
+
+            await bot.sendMessage(chatId, "✅ Withdrawal request submitted successfully! Please wait for admin approval.");
+
+            // Notify admins
+            const adminMessage = `✅ Withdrawal request from @${user.username || chatId} for ${amount} ETB`;
+            await Promise.all([
+                bot.sendMessage(1982046925, adminMessage),
+                bot.sendMessage(415285189, adminMessage),
+                bot.sendMessage(923117728, adminMessage)
+            ]);
 
         } catch (error) {
             console.error("Withdrawal Error:", error);
-            await bot.sendMessage(chatId, "❌ An unexpected error occurred. Please try again later.");
+            await bot.sendMessage(chatId, "❌ An error occurred during withdrawal. Please try again later.");
         } finally {
             releaseLock(chatId, 'withdraw');
         }
