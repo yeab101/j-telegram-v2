@@ -77,7 +77,7 @@ const commandHandlers = {
           [{ text: "Deposit 💸", callback_data: "deposit" }, { text: "Withdraw 💁‍♂️", callback_data: "withdraw" }, { text: "Transfer 💳", callback_data: "transfer" }],
           [{ text: "Balance 💰", callback_data: "balance" }, { text: "Winners 🎉", callback_data: "gamesHistory" }, { text: "Transactions", callback_data: "history" } ],
 
- 
+
         ]
       }
     });
@@ -219,14 +219,14 @@ const commandHandlers = {
 
   // Transaction handlers
   deposit: async (chatId) => {
-    await safeCommandHandler(transactionHandlers.deposit)(chatId, bot);
+    await transactionHandlers.deposit(chatId, bot);
   },
   withdraw: async (chatId) => {
-    await safeCommandHandler(transactionHandlers.withdraw)(chatId, bot);
+    await transactionHandlers.withdraw(chatId, bot);
   },
  
   transfer: async (chatId) => {
-    await safeCommandHandler(transactionHandlers.transfer)(chatId, bot);
+    await transactionHandlers.transfer(chatId, bot);
   },
 
   history: async (chatId) => {

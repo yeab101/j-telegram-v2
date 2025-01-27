@@ -2,33 +2,6 @@ const User = require("../models/userModel");
 const Finance = require("../models/financeModel.js");
 const SantimpaySdk = require("../lib/index.js");
 
-// Add transaction lock mechanism
-const activeTransactions = new Map();
-
-const acquireLock = async (chatId, operation, timeout = 60000) => {
-    const key = `${chatId}-${operation}`;
-    if (activeTransactions.has(key)) {
-        return false;
-    }
-    activeTransactions.set(key, Date.now() + timeout);
-    return true;
-};
-
-const releaseLock = (chatId, operation) => {
-    const key = `${chatId}-${operation}`;
-    activeTransactions.delete(key);
-};
-
-// Clean expired locks periodically
-setInterval(() => {
-    const now = Date.now();
-    activeTransactions.forEach((expiry, key) => {
-        if (now > expiry) {
-            activeTransactions.delete(key);
-        }
-    });
-}, 60000);
-
 const PRIVATE_KEY_IN_PEM = `
 -----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIFamQMQ/56tZuX6sZQBzxxs4EbH9ndELv14JMo6fkfR0oAoGCCqGSM49
@@ -82,14 +55,8 @@ const getValidInput = async (bot, chatId, prompt, validator) => {
     }
 };
 
-
 const transactionHandlers = {
     deposit: async (chatId, bot) => {
-        if (!await acquireLock(chatId, 'deposit')) {
-            await bot.sendMessage(chatId, "⚠️ A deposit is already in progress. Please wait.");
-            return;
-        }
-
         try {
             const user = await User.findOne({ chatId });
             if (!user) {
@@ -153,7 +120,6 @@ const transactionHandlers = {
             // custom ID used by merchant to identify the payment
             const id = Math.floor(Math.random() * 1000000000).toString();
 
-
             try {
                 const response = await client.directPayment(id, amount, "Ticket Purchase For JokerBingoBot", notifyUrl, phoneNumber, paymentMethod);
                 const transaction = await client.checkTransactionStatus(id);
@@ -176,18 +142,11 @@ const transactionHandlers = {
 
         } catch (error) {
             console.error("Deposit Error:", error);
-            await bot.sendMessage(chatId, "❌ An unexpected error occurred. Please try again later.");
-        } finally {
-            releaseLock(chatId, 'deposit');
+            await bot.sendMessage(chatId, "❌ Deposit failed");
         }
     },
 
     withdraw: async (chatId, bot) => {
-        if (!await acquireLock(chatId, 'withdraw')) {
-            await bot.sendMessage(chatId, "⚠️ A withdrawal is already in progress. Please wait.");
-            return;
-        }
-
         try {
             const user = await User.findOne({ chatId });
             if (!user) {
@@ -254,21 +213,12 @@ const transactionHandlers = {
 
         } catch (error) {
             console.error("Withdrawal Error:", error);
-            await bot.sendMessage(chatId, "❌ An error occurred during withdrawal. Please try again later.");
-        } finally {
-            releaseLock(chatId, 'withdraw');
+            await bot.sendMessage(chatId, "❌ Withdrawal failed");
         }
     },
 
     transfer: async (chatId, bot) => {
-        if (!await acquireLock(chatId, 'transfer')) {
-            await bot.sendMessage(chatId, "⚠️ A transfer is already in progress. Please wait.");
-            return;
-        }
-
         const session = await User.startSession();
-        session.startTransaction();
-
         try {
             const sender = await User.findOne({ chatId }).session(session);
             if (!sender) {
@@ -330,8 +280,6 @@ const transactionHandlers = {
                 type: 'transfer'
             }).save({ session });
 
-            await session.commitTransaction();
-
             // Notify both parties
             await Promise.all([
                 bot.sendMessage(chatId, `Transfer successful!\nAmount: ${amount} ETB\nTo: ${recipientPhone}\nTransaction ID: ${transactionId}`),
@@ -344,10 +292,8 @@ const transactionHandlers = {
             await bot.sendMessage(chatId, "Error processing transfer. Please try again. /transfer");
         } finally {
             session.endSession();
-            releaseLock(chatId, 'transfer');
         }
     },
-
 };
 
 module.exports = transactionHandlers; 
