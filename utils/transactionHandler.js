@@ -12,7 +12,7 @@ bFpzTyPzIa0JE/MULNEx0rjnia3FntuoiA==
 
 const GATEWAY_MERCHANT_ID = process.env.GATEWAY_MERCHANT_ID;
 const client = new SantimpaySdk(GATEWAY_MERCHANT_ID, PRIVATE_KEY_IN_PEM);
-const notifyUrl = "https://jbackend-v2.onrender.com/api/callback/verify-transaction"; 
+const notifyUrl = "https://jbackend-v2.onrender.com/api/callback/verify-transaction";
 
 const getValidInput = async (bot, chatId, prompt, validator) => {
     while (true) {
@@ -64,32 +64,34 @@ const transactionHandlers = {
                 return;
             }
 
-            // Add Telebirr button first
-            const paymentMethodMsg = await bot.sendMessage(chatId, "Select payment method:", {
-                reply_markup: {
-                    inline_keyboard: [[
-                        { text: "Telebirr 📱", callback_data: "telebirr_deposit" }
-                    ]]
-                }
-            });
+            // // Add Telebirr button first
+            // const paymentMethodMsg = await bot.sendMessage(chatId, "Select payment method:", {
+            //     reply_markup: {
+            //         inline_keyboard: [[
+            //             { text: "Telebirr 📱", callback_data: "telebirr_deposit" }
+            //         ]]
+            //     }
+            // });
 
-            // Wait for button click
-            try {
-                await new Promise((resolve, reject) => {
-                    const callbackHandler = (callbackQuery) => {
-                        if (callbackQuery.message.chat.id === chatId &&
-                            callbackQuery.data === "telebirr_deposit") {
-                            bot.removeListener('callback_query', callbackHandler);
-                            resolve();
-                        }
-                    };
-                    bot.on('callback_query', callbackHandler);
-                    setTimeout(() => reject(new Error('Timeout')), 60000);
-                });
-            } catch (error) {
-                await bot.sendMessage(chatId, "⏰ Deposit cancelled due to timeout.");
-                return;
-            }
+            // // Wait for button click
+            // try {
+            //     await new Promise((resolve, reject) => {
+            //         const callbackHandler = (callbackQuery) => {
+            //             if (callbackQuery.message.chat.id === chatId &&
+            //                 callbackQuery.data === "telebirr_deposit") {
+            //                 bot.removeListener('callback_query', callbackHandler);
+            //                 resolve();
+            //             }
+            //         };
+            //         bot.on('callback_query', callbackHandler);
+            //         setTimeout(() => reject(new Error('Timeout')), 60000);
+            //     });
+            // } catch (error) {
+            //     await bot.sendMessage(chatId, "⏰ Deposit cancelled due to timeout.");
+            //     return;
+            // }
+
+            await bot.sendMessage(chatId, "Deposit is done by Telebirr");
 
             // Rest of the deposit logic
             let amount = await getValidInput(
@@ -113,7 +115,7 @@ const transactionHandlers = {
             const paymentMethod = "Telebirr";
 
             if (!first_name || !phoneNumber) {
-                await bot.sendMessage(chatId, "Please set a username and phone number in your Telegram settings and try again.");
+                await bot.sendMessage(chatId, "Please set a username Telegram settings and try again.");
                 return;
             }
 
@@ -194,14 +196,14 @@ const transactionHandlers = {
 
             // Update user balance
             user.balance -= parseFloat(amount);
-            
+
             // Save both transaction and user update
             await Promise.all([
                 transactionNew.save(),
                 user.save()
             ]);
 
-            await bot.sendMessage(chatId, "✅ Withdrawal request submitted successfully! Please wait for admin approval.");
+            await bot.sendMessage(chatId, "✅ Withdrawal request submitted successfully! Please wait ...");
 
             // Notify admins
             const adminMessage = `✅ Withdrawal request from @${user.username || chatId} for ${amount} ETB`;
@@ -269,7 +271,7 @@ const transactionHandlers = {
             await sender.save({ session });
             await recipient.save({ session });
 
-            const transactionId = `TR${Date.now()}${Math.random().toString(36).substr(2, 4)}`;
+            const transactionId = Math.floor(Math.random() * 1000000000).toString();
 
             await new Finance({
                 transactionId,
@@ -277,7 +279,8 @@ const transactionHandlers = {
                 recipientChatId: recipient.chatId,
                 amount: parseFloat(amount),
                 status: 'COMPLETED',
-                type: 'transfer'
+                type: 'transfer',
+                paymentMethod: "InAppTransfer"
             }).save({ session });
 
             // Notify both parties
