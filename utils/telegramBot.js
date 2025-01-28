@@ -4,6 +4,7 @@ const User = require("../models/userModel");
 const path = require('path');
 const transactionHandlers = require("./transactionHandler");
 const historyHandlers = require("./historyHandler"); 
+const DepositRequest = require('../models/depositRequestModel.js');
 
 const bot = new TelegramBot(process.env.TELEGRAMBOTTOKEN, { polling: true });
 const baseUrl = process.env.CLIENT_URL
@@ -219,7 +220,31 @@ const commandHandlers = {
 
   // Transaction handlers
   deposit: async (chatId) => {
-    await transactionHandlers.deposit(chatId, bot);
+    try {
+        const user = await User.findOne({ chatId });
+        if (!user) {
+            await bot.sendMessage(chatId, "❌ Please register first using /register");
+            return;
+        }
+
+        await bot.sendMessage(chatId, 
+            "🏦 *Commercial Bank of Ethiopia*\n\n" + 
+            "Account Number: *1000123456789*\n\n" +
+            "After making the deposit, click the button below to submit your transaction ID that start with FTXXXXXXXXX.",
+            { 
+                parse_mode: "Markdown",
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: "Submit Transaction ID 📝", callback_data: "submit_transaction" }
+                    ]]
+                }
+            }
+        );
+
+    } catch (error) {
+        console.error("Deposit Error:", error);
+        await bot.sendMessage(chatId, "❌ An error occurred. Please try again.");
+    }
   },
   withdraw: async (chatId) => {
     await transactionHandlers.withdraw(chatId, bot);
@@ -385,6 +410,70 @@ const callbackActions = {
   history: safeCommandHandler(commandHandlers.history, 'history'),
   gamesHistory: safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),  
   convert: safeCommandHandler(commandHandlers.convert, 'convert'),
+  submit_transaction: async (chatId) => {
+    await bot.sendMessage(chatId, "📝 Please enter your CBE transaction ID:");
+    await collectTransactionId(chatId);
+  }
+};
+
+const collectTransactionId = async (chatId) => {
+    return new Promise(async (resolve, reject) => {
+        const timeout = setTimeout(() => {
+            bot.removeListener('message', messageHandler);
+            bot.sendMessage(chatId, "⏰ Deposit request timed out. Please try again.");
+            reject(new Error('Timeout'));
+        }, 300000); // 5 minutes timeout
+
+        const messageHandler = async (msg) => {
+            if (msg.chat.id === chatId) {
+                const transactionId = msg.text.trim();
+                
+                // Basic validation for transaction ID
+                if (transactionId.length < 4) {
+                    await bot.sendMessage(chatId, "❌ Invalid transaction ID. Please enter a valid one:");
+                    return;
+                }
+
+                try {
+                    // Check if transaction ID already exists
+                    const existingRequest = await DepositRequest.findOne({ transactionId });
+                    if (existingRequest) {
+                        await bot.sendMessage(chatId, "❌ This transaction ID has already been submitted. Please enter a different one:");
+                        return;
+                    }
+
+                    // Save deposit request
+                    await DepositRequest.create({
+                        transactionId,
+                        chatId,
+                        bank: 'CBE'
+                    });
+
+                    clearTimeout(timeout);
+                    bot.removeListener('message', messageHandler);
+
+                    await bot.sendMessage(chatId, 
+                        "✅ Deposit request received!\n\n" +
+                        "Transaction ID: " + transactionId + "\n" +
+                        "Your deposit will be processed shortly."
+                    );
+
+                    await Promise.all([
+                      bot.sendMessage(1982046925, `💰 Deposit request from @${chatId} for ${transactionId}`),
+                      // bot.sendMessage(415285189, `💰 Deposit request from @${chatId} for ${transactionId}`),
+                      // bot.sendMessage(923117728, `💰 Deposit request from @${chatId} for ${transactionId}`)
+                  ]);
+                    resolve();
+                } catch (error) {
+                    console.error("Error saving deposit request:", error);
+                    await bot.sendMessage(chatId, "❌ Error saving deposit request. Please try again.");
+                    reject(error);
+                }
+            }
+        };
+
+        bot.on('message', messageHandler);
+    });
 };
 
 // Improved callback query handler with error recovery
@@ -398,7 +487,6 @@ const handleCallbackQuery = async (callbackQuery) => {
       await bot.answerCallbackQuery(callbackQuery.id, { timeout: 1000 });
     } catch (error) { }
  
-
     // Handle regular actions
     const handler = callbackActions[data];
     if (handler) {
