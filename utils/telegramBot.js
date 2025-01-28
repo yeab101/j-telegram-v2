@@ -229,7 +229,7 @@ const commandHandlers = {
 
         await bot.sendMessage(chatId, 
             "🏦 *Commercial Bank of Ethiopia*\n\n" + 
-            "Account Number: *1000123456789*\n\n" +
+            "Account Number: *1000186729785*\n\n" +
             "After making the deposit, click the button below to submit your transaction ID that start with FTXXXXXXXXX.",
             { 
                 parse_mode: "Markdown",
