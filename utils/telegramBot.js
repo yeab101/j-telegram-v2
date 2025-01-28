@@ -3,7 +3,7 @@ const TelegramBot = require("node-telegram-bot-api");
 const User = require("../models/userModel");
 const path = require('path');
 const transactionHandlers = require("./transactionHandler");
-const historyHandlers = require("./historyHandler"); 
+const historyHandlers = require("./historyHandler");
 const DepositRequest = require('../models/depositRequestModel.js');
 
 const bot = new TelegramBot(process.env.TELEGRAMBOTTOKEN, { polling: true });
@@ -82,7 +82,7 @@ const commandHandlers = {
       }
     });
   },
- 
+
 
   // Game related handlers
   play: async (chatId) => {
@@ -122,89 +122,89 @@ const commandHandlers = {
     await session.startTransaction();
 
     try {
-        const existingUser = await User.findOne({ chatId }).session(session);
-        if (existingUser) {
-            await bot.sendMessage(chatId, "✅ You're already registered! Use /play to start.");
-            await session.commitTransaction();
-            return;
-        }
-
-        // Enhanced phone number validation with retry logic
-        const validatePhoneNumber = (number) => {
-            const ethiopianRegex = /^09[0-9]{8}$/;
-            return ethiopianRegex.test(number);
-        };
-
-        // Modified collectResponse to return full message object
-        const collectResponse = async (promptText, validationFn) => {
-            return new Promise(async (resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    bot.removeListener('message', messageHandler);
-                    reject(new Error('Input timeout'));
-                }, 120000);
-
-                const messageHandler = async (msg) => {
-                    if (msg.chat.id === chatId && validationFn(msg.text)) {
-                        clearTimeout(timeout);
-                        bot.removeListener('message', messageHandler);
-                        resolve(msg); // Return full message object
-                    } else if (msg.chat.id === chatId) {
-                        await bot.sendMessage(chatId, "❌ Invalid format. Please try again:");
-                    }
-                };
-
-                bot.on('message', messageHandler);
-                await bot.sendMessage(chatId, promptText);
-            });
-        };
-
-        // Get phone number message with user details
-        const phoneNumberMessage = await collectResponse(
-            "📱 Please enter your phone number (09xxxxxxxx):",
-            validatePhoneNumber
-        );
-        
-        // Extract values from collected message
-        const phoneNumber = phoneNumberMessage.text;
-        const username = phoneNumberMessage.from.username || 
-                        `${phoneNumberMessage.from.first_name}_${phoneNumberMessage.from.id}`;
-
-        // Check for existing phone number
-        const phoneExists = await User.exists({ phoneNumber }).session(session);
-        if (phoneExists) {
-            await bot.sendMessage(chatId, "❌ This number is already registered");
-            await session.abortTransaction();
-            return;
-        }
-
-        // Create user with transaction
-        await User.create([{
-            chatId,
-            phoneNumber,
-            username, 
-        }], { session });
-
+      const existingUser = await User.findOne({ chatId }).session(session);
+      if (existingUser) {
+        await bot.sendMessage(chatId, "✅ You're already registered! Use /play to start.");
         await session.commitTransaction();
-        await bot.sendMessage(chatId, "🎉 Registration successful!\n\n" +
-            "• Use /deposit to add funds\n" +
-            "• Use /play to start games\n" +
-            "• Check /balance anytime");
+        return;
+      }
+
+      // Enhanced phone number validation with retry logic
+      const validatePhoneNumber = (number) => {
+        const ethiopianRegex = /^09[0-9]{8}$/;
+        return ethiopianRegex.test(number);
+      };
+
+      // Modified collectResponse to return full message object
+      const collectResponse = async (promptText, validationFn) => {
+        return new Promise(async (resolve, reject) => {
+          const timeout = setTimeout(() => {
+            bot.removeListener('message', messageHandler);
+            reject(new Error('Input timeout'));
+          }, 120000);
+
+          const messageHandler = async (msg) => {
+            if (msg.chat.id === chatId && validationFn(msg.text)) {
+              clearTimeout(timeout);
+              bot.removeListener('message', messageHandler);
+              resolve(msg); // Return full message object
+            } else if (msg.chat.id === chatId) {
+              await bot.sendMessage(chatId, "❌ Invalid format. Please try again:");
+            }
+          };
+
+          bot.on('message', messageHandler);
+          await bot.sendMessage(chatId, promptText);
+        });
+      };
+
+      // Get phone number message with user details
+      const phoneNumberMessage = await collectResponse(
+        "📱 Please enter your phone number (09xxxxxxxx):",
+        validatePhoneNumber
+      );
+
+      // Extract values from collected message
+      const phoneNumber = phoneNumberMessage.text;
+      const username = phoneNumberMessage.from.username ||
+        `${phoneNumberMessage.from.first_name}_${phoneNumberMessage.from.id}`;
+
+      // Check for existing phone number
+      const phoneExists = await User.exists({ phoneNumber }).session(session);
+      if (phoneExists) {
+        await bot.sendMessage(chatId, "❌ This number is already registered");
+        await session.abortTransaction();
+        return;
+      }
+
+      // Create user with transaction
+      await User.create([{
+        chatId,
+        phoneNumber,
+        username,
+      }], { session });
+
+      await session.commitTransaction();
+      await bot.sendMessage(chatId, "🎉 Registration successful!\n\n" +
+        "• Use /deposit to add funds\n" +
+        "• Use /play to start games\n" +
+        "• Check /balance anytime");
 
     } catch (error) {
-        await session.abortTransaction();
-        
-        // Enhanced error messages
-        const errorMessages = {
-            'Input timeout': '⏰ Registration timed out. Please try again',
-            'MongoError': '🔒 Database error. Contact support'
-        };
+      await session.abortTransaction();
 
-        await bot.sendMessage(chatId, errorMessages[error.message] || 
-            "❌ Registration failed. Please try /register again");
-        
-        console.error("Registration Error:", error);
+      // Enhanced error messages
+      const errorMessages = {
+        'Input timeout': '⏰ Registration timed out. Please try again',
+        'MongoError': '🔒 Database error. Contact support'
+      };
+
+      await bot.sendMessage(chatId, errorMessages[error.message] ||
+        "❌ Registration failed. Please try /register again");
+
+      console.error("Registration Error:", error);
     } finally {
-        await session.endSession();
+      await session.endSession();
     }
   },
 
@@ -221,35 +221,40 @@ const commandHandlers = {
   // Transaction handlers
   deposit: async (chatId) => {
     try {
-        const user = await User.findOne({ chatId });
-        if (!user) {
-            await bot.sendMessage(chatId, "❌ Please register first using /register");
-            return;
-        }
+      const user = await User.findOne({ chatId });
+      if (!user) {
+        await bot.sendMessage(chatId, "❌ Please register first using /register");
+        return;
+      }
 
-        await bot.sendMessage(chatId, 
-            "🏦 *Commercial Bank of Ethiopia*\n\n" + 
-            "Account Number: *1000186729785*\n\n" +
-            "After making the deposit, click the button below to submit your transaction ID that start with FTXXXXXXXXX.",
-            { 
-                parse_mode: "Markdown",
-                reply_markup: {
-                    inline_keyboard: [[
-                        { text: "Submit Transaction ID 📝", callback_data: "submit_transaction" }
-                    ]]
-                }
-            }
-        );
+      // First send the tutorial GIF
+      const tutorialGifPath = path.join(__dirname, 'tutorial.gif');
+      await bot.sendAnimation(chatId, tutorialGifPath);
+
+      const accountNumber = "1000186729785";
+      
+      await bot.sendMessage(chatId, 
+        `🏦 Commercial Bank of Ethiopia Account Number:\n\`${accountNumber}\`\n\n` +
+        "Deposit ለማድረግ የፈለጉትን ብር ወደዚህ የንግድባንክ አካውንት ብር ካስገቡ በኋላ https://.... ብሎ የሚጀምረዉን የትራንዛክሽን ቁጥር  ያስገቡት ",
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [ 
+              [{ text: "እዚ ላይ ያስገቡት 👇👇👇", callback_data: "submit_transaction" }]
+            ]
+          }
+        }
+      );
 
     } catch (error) {
-        console.error("Deposit Error:", error);
-        await bot.sendMessage(chatId, "❌ An error occurred. Please try again.");
+      console.error("Deposit Error:", error);
+      await bot.sendMessage(chatId, "❌ An error occurred. Please try again.");
     }
   },
   withdraw: async (chatId) => {
     await transactionHandlers.withdraw(chatId, bot);
   },
- 
+
   transfer: async (chatId) => {
     await transactionHandlers.transfer(chatId, bot);
   },
@@ -307,10 +312,10 @@ const commandHandlers = {
       // Update user balance and bonus
       await User.updateOne(
         { chatId },
-        { 
-          $inc: { 
+        {
+          $inc: {
             balance: balanceToAdd,
-            bonus: -amount 
+            bonus: -amount
           }
         }
       ).session(session);
@@ -320,8 +325,8 @@ const commandHandlers = {
 
     } catch (error) {
       await session.abortTransaction();
-      const errorMessage = error.message === 'Conversion timeout' 
-        ? "⏰ Conversion timed out. Please try again" 
+      const errorMessage = error.message === 'Conversion timeout'
+        ? "⏰ Conversion timed out. Please try again"
         : "❌ Conversion failed. Please try /convert again";
       await bot.sendMessage(chatId, errorMessage);
       console.error("Conversion Error:", error);
@@ -346,26 +351,22 @@ const commandHandlers = {
 
       for (let i = 0; i < users.length; i += BATCH_SIZE) {
         const batch = users.slice(i, i + BATCH_SIZE);
-        
+
         await Promise.all(batch.map(async (user) => {
           try {
             await bot.sendMessage(
               user.chatId,
-              `🎉 Bonus Update!\n\nYour current bonus balance: ${Math.floor(user.bonus)}\n\n` +
-              `Use /convert to turn bonuses into playable balance!`
+              `🎉 Your bonus points: ${Math.floor(user.bonus)}\n\n` +
+              `Use /convert to turn bonuses into playable balance!` +
+              `\n\n🎁 100 bonus points = 10 birr`
             );
           } catch (error) {
             console.error(`Failed to send to ${user.chatId}:`, error.message);
-            // Remove invalid users from database
-            if (error.response?.error_code === 403) { // User blocked the bot
-              await User.deleteOne({ chatId: user.chatId });
-            }
           }
         }));
 
         await new Promise(resolve => setTimeout(resolve, DELAY_MS));
       }
-
       await bot.sendMessage(chatId, `✅ Announcement sent to ${users.length} users`);
     } catch (error) {
       console.error('Announcement error:', error);
@@ -378,15 +379,15 @@ const commandHandlers = {
 const commandMappings = {
   '/start': safeCommandHandler(async (chatId) => {
     await commandHandlers.sendMainMenu(chatId);
-  }, 'start'), 
-  '/play': safeCommandHandler(commandHandlers.play, 'play'), 
+  }, 'start'),
+  '/play': safeCommandHandler(commandHandlers.play, 'play'),
   '/register': safeCommandHandler(commandHandlers.register, 'register'),
   '/balance': safeCommandHandler(commandHandlers.checkBalance, 'balance'),
   '/deposit': safeCommandHandler(commandHandlers.deposit, 'deposit'),
-  '/withdraw': safeCommandHandler(commandHandlers.withdraw, 'withdraw'), 
+  '/withdraw': safeCommandHandler(commandHandlers.withdraw, 'withdraw'),
   '/transfer': safeCommandHandler(commandHandlers.transfer, 'transfer'),
   '/history': safeCommandHandler(commandHandlers.history, 'history'),
-  '/winners': safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'), 
+  '/winners': safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),
   '/convert': safeCommandHandler(commandHandlers.convert, 'convert'),
   '/announce': safeCommandHandler(commandHandlers.sendBonusAnnouncement, 'announce'),
 };
@@ -405,75 +406,89 @@ const callbackActions = {
   register: safeCommandHandler(commandHandlers.register, 'register'),
   deposit: safeCommandHandler(commandHandlers.deposit, 'deposit'),
   balance: safeCommandHandler(commandHandlers.checkBalance, 'balance'),
-  withdraw: safeCommandHandler(commandHandlers.withdraw, 'withdraw'), 
+  withdraw: safeCommandHandler(commandHandlers.withdraw, 'withdraw'),
   transfer: safeCommandHandler(commandHandlers.transfer, 'transfer'),
   history: safeCommandHandler(commandHandlers.history, 'history'),
-  gamesHistory: safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),  
+  gamesHistory: safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),
   convert: safeCommandHandler(commandHandlers.convert, 'convert'),
   submit_transaction: async (chatId) => {
     await bot.sendMessage(chatId, "📝 Please enter your CBE transaction ID:");
     await collectTransactionId(chatId);
+  },
+  copy_1000186729785: async (chatId, query) => {
+    try {
+      await bot.answerCallbackQuery(query.id, {
+        text: "Account number copied! 📋",
+        show_alert: true
+      });
+    } catch (error) {
+      console.error("Copy callback error:", error);
+    }
   }
 };
 
 const collectTransactionId = async (chatId) => {
-    return new Promise(async (resolve, reject) => {
-        const timeout = setTimeout(() => {
-            bot.removeListener('message', messageHandler);
-            bot.sendMessage(chatId, "⏰ Deposit request timed out. Please try again.");
-            reject(new Error('Timeout'));
-        }, 300000); // 5 minutes timeout
+  return new Promise(async (resolve, reject) => {
+    const timeout = setTimeout(() => {
+      bot.removeListener('message', messageHandler);
+      bot.sendMessage(chatId, "⏰ Deposit request timed out. Please try again.");
+      reject(new Error('Timeout'));
+    }, 300000); // 5 minutes timeout
 
-        const messageHandler = async (msg) => {
-            if (msg.chat.id === chatId) {
-                const transactionId = msg.text.trim();
-                
-                // Basic validation for transaction ID
-                if (transactionId.length < 4) {
-                    await bot.sendMessage(chatId, "❌ Invalid transaction ID. Please enter a valid one:");
-                    return;
-                }
+    const messageHandler = async (msg) => {
+      if (msg.chat.id === chatId) {
+        const transactionId = msg.text.trim();
 
-                try {
-                    // Check if transaction ID already exists
-                    const existingRequest = await DepositRequest.findOne({ transactionId });
-                    if (existingRequest) {
-                        await bot.sendMessage(chatId, "❌ This transaction ID has already been submitted. Please enter a different one:");
-                        return;
-                    }
+        // Enhanced validation for transaction ID
+        if (!transactionId.toLowerCase().startsWith('https')) {
+          await bot.sendMessage(chatId, "❌ Invalid transaction ID. Transaction ID must start with 'https'. Please enter a valid one:");
+          return;
+        }
 
-                    // Save deposit request
-                    await DepositRequest.create({
-                        transactionId,
-                        chatId,
-                        bank: 'CBE'
-                    });
+        // Basic length validation
+        if (transactionId.length < 4) {
+          await bot.sendMessage(chatId, "❌ Invalid transaction ID. Please enter a valid one:");
+          return;
+        }
 
-                    clearTimeout(timeout);
-                    bot.removeListener('message', messageHandler);
+        try {
+          // Check if transaction ID already exists
+          const existingRequest = await DepositRequest.findOne({ transactionId });
+          if (existingRequest) {
+            await bot.sendMessage(chatId, "❌ This transaction ID has already been submitted. Please enter a different one:");
+            return;
+          }
 
-                    await bot.sendMessage(chatId, 
-                        "✅ Deposit request received!\n\n" +
-                        "Transaction ID: " + transactionId + "\n" +
-                        "Your deposit will be processed shortly."
-                    );
+          // Save deposit request
+          await DepositRequest.create({
+            transactionId,
+            chatId,
+            bank: 'CBE'
+          });
 
-                    await Promise.all([
-                      bot.sendMessage(1982046925, `💰 Deposit request from @${chatId} for ${transactionId}`),
-                      bot.sendMessage(415285189, `💰 Deposit request from @${chatId} for ${transactionId}`),
-                      bot.sendMessage(923117728, `💰 Deposit request from @${chatId} for ${transactionId}`)
-                  ]);
-                    resolve();
-                } catch (error) {
-                    console.error("Error saving deposit request:", error);
-                    await bot.sendMessage(chatId, "❌ Error saving deposit request. Please try again.");
-                    reject(error);
-                }
-            }
-        };
+          clearTimeout(timeout);
+          bot.removeListener('message', messageHandler);
 
-        bot.on('message', messageHandler);
-    });
+          await bot.sendMessage(chatId,
+            "✅ Your deposit is being processed" 
+          );
+
+          await Promise.all([
+            bot.sendMessage(1982046925, `💰 Deposit request from @${chatId} for ${transactionId}`),
+            bot.sendMessage(415285189, `💰 Deposit request from @${chatId} for ${transactionId}`),
+            bot.sendMessage(923117728, `💰 Deposit request from @${chatId} for ${transactionId}`)
+          ]);
+          resolve();
+        } catch (error) {
+          console.error("Error saving deposit request:", error);
+          await bot.sendMessage(chatId, "❌ Error saving deposit request. Please try again.");
+          reject(error);
+        }
+      }
+    };
+
+    bot.on('message', messageHandler);
+  });
 };
 
 // Improved callback query handler with error recovery
@@ -482,24 +497,23 @@ const handleCallbackQuery = async (callbackQuery) => {
   const data = callbackQuery.data;
 
   try {
-    // Try to answer callback query first with a short timeout
-    try {
-      await bot.answerCallbackQuery(callbackQuery.id, { timeout: 1000 });
-    } catch (error) { }
- 
-    // Handle regular actions
-    const handler = callbackActions[data];
-    if (handler) {
-      await handler(chatId);
+    if (data.startsWith('copy_')) {
+      const handler = callbackActions[data];
+      if (handler) {
+        await handler(chatId, callbackQuery);
+      }
     } else {
-      console.log(`Unhandled callback data: ${data}`);
-      await bot.sendMessage(chatId, "This action is currently not available. Please try again later.");
+      // Handle regular actions
+      const handler = callbackActions[data];
+      if (handler) {
+        await handler(chatId);
+      } else {
+        console.log(`Unhandled callback data: ${data}`);
+        await bot.sendMessage(chatId, "This action is currently not available. Please try again later.");
+      }
     }
-
   } catch (error) {
     console.error('Callback query error:', error);
-    
-    // Don't let single user errors crash the entire bot
     try {
       await bot.sendMessage(chatId, "❌ An error occurred. Please try again.");
     } catch (msgError) {
@@ -535,7 +549,7 @@ setInterval(() => {
 // Database Query Optimization (Add caching)
 const userCache = new Map();
 const getUser = async (chatId) => {
-  if(userCache.has(chatId)) return userCache.get(chatId);
+  if (userCache.has(chatId)) return userCache.get(chatId);
   const user = await User.findOne({ chatId }).lean().cache('1 minute');
   userCache.set(chatId, user);
   return user;
