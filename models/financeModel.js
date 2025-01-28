@@ -14,8 +14,7 @@ const financeSchema = new mongoose.Schema({
         type: String,
         enum: ['deposit', 'withdrawal', 'transfer'],
         required: true
-    },
-    santimPayTxnId: { type: String},
+    }, 
     paymentMethod: { type: String}
 }, { timestamps: true });  
 

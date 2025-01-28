@@ -75,7 +75,8 @@ const commandHandlers = {
         inline_keyboard: [
           [{ text: "Play 🎮", web_app: { url: `${baseUrl}/room?token=${chatId}` } }, { text: "Register 👤", callback_data: "register" }, { text: "Join Group ", url: "https://t.me/jokerbingo_bot_group" }],
           [{ text: "Deposit 💸", callback_data: "deposit" }, { text: "Withdraw 💁‍♂️", callback_data: "withdraw" }, { text: "Transfer 💳", callback_data: "transfer" }],
-          [{ text: "Balance 💰", callback_data: "balance" }, { text: "Winners 🎉", callback_data: "gamesHistory" }, { text: "Transactions", callback_data: "history" } ],
+          [{ text: "Balance 💰", callback_data: "balance" }, { text: "Winners 🎉", callback_data: "gamesHistory" }, { text: "Transactions", callback_data: "history" }],
+          [{ text: "Convert 💱", callback_data: "convert" }]
         ]
       }
     });
@@ -212,7 +213,8 @@ const commandHandlers = {
       await bot.sendMessage(chatId, "User not found. Please register first.");
       return;
     }
-    await bot.sendMessage(chatId, `Your current balance is: 💰 ${Math.floor(user.balance)}`);
+    await bot.sendMessage(chatId, `💰 Balance: ${Math.floor(user.balance)}`);
+    await bot.sendMessage(chatId, `🎁 Bonus: ${Math.floor(user.bonus)}`);
   },
 
   // Transaction handlers
@@ -233,7 +235,118 @@ const commandHandlers = {
 
   gamesHistory: async (chatId) => {
     await historyHandlers.showGameHistory(chatId, bot);
-  }
+  },
+
+  // New convert handler
+  convert: async (chatId) => {
+    const session = await User.startSession();
+    await session.startTransaction();
+
+    try {
+      const user = await User.findOne({ chatId }).session(session);
+      if (!user) {
+        await bot.sendMessage(chatId, "❌ User not found. Please register first.");
+        await session.abortTransaction();
+        return;
+      }
+
+      // Collect response with validation
+      const collectResponse = async () => {
+        return new Promise(async (resolve, reject) => {
+          const timeout = setTimeout(() => {
+            bot.removeListener('message', messageHandler);
+            reject(new Error('Conversion timeout'));
+          }, 120000);
+
+          const messageHandler = async (msg) => {
+            if (msg.chat.id === chatId) {
+              const amount = parseInt(msg.text);
+              if (!isNaN(amount) && amount > 0 && amount <= user.bonus) {
+                clearTimeout(timeout);
+                bot.removeListener('message', messageHandler);
+                resolve(amount);
+              } else {
+                await bot.sendMessage(chatId, `❌ Invalid amount. You have ${user.bonus} bonus points. Enter valid amount:`);
+              }
+            }
+          };
+
+          bot.on('message', messageHandler);
+          await bot.sendMessage(chatId, `🎁 Your bonus points: ${user.bonus}\nEnter amount to convert (100 bonus = 1 balance):`);
+        });
+      };
+
+      const amount = await collectResponse();
+      const balanceToAdd = amount / 100;
+
+      // Update user balance and bonus
+      await User.updateOne(
+        { chatId },
+        { 
+          $inc: { 
+            balance: balanceToAdd,
+            bonus: -amount 
+          }
+        }
+      ).session(session);
+
+      await session.commitTransaction();
+      await bot.sendMessage(chatId, `✅ Converted ${amount} bonus to ${balanceToAdd} balance!`);
+
+    } catch (error) {
+      await session.abortTransaction();
+      const errorMessage = error.message === 'Conversion timeout' 
+        ? "⏰ Conversion timed out. Please try again" 
+        : "❌ Conversion failed. Please try /convert again";
+      await bot.sendMessage(chatId, errorMessage);
+      console.error("Conversion Error:", error);
+    } finally {
+      await session.endSession();
+    }
+  },
+
+  sendBonusAnnouncement: async (chatId) => {
+    try {
+      // Security: Only allow admins to send announcements
+      const adminUser = await User.findOne({ chatId, role: 1 });
+      if (!adminUser) {
+        await bot.sendMessage(chatId, "❌ Admin privileges required");
+        return;
+      }
+
+      // Batch processing with rate limiting
+      const users = await User.find({}, 'chatId bonus');
+      const BATCH_SIZE = 10;
+      const DELAY_MS = 1000;
+
+      for (let i = 0; i < users.length; i += BATCH_SIZE) {
+        const batch = users.slice(i, i + BATCH_SIZE);
+        
+        await Promise.all(batch.map(async (user) => {
+          try {
+            await bot.sendMessage(
+              user.chatId,
+              `🎉 Bonus Update!\n\nYour current bonus balance: ${Math.floor(user.bonus)}\n\n` +
+              `Use /convert to turn bonuses into playable balance!`
+            );
+          } catch (error) {
+            console.error(`Failed to send to ${user.chatId}:`, error.message);
+            // Remove invalid users from database
+            if (error.response?.error_code === 403) { // User blocked the bot
+              await User.deleteOne({ chatId: user.chatId });
+            }
+          }
+        }));
+
+        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+      }
+
+      await bot.sendMessage(chatId, `✅ Announcement sent to ${users.length} users`);
+    } catch (error) {
+      console.error('Announcement error:', error);
+      await bot.sendMessage(chatId, "❌ Failed to send announcements");
+    }
+  },
 };
 
 // Updated command mappings with proper error handling
@@ -249,6 +362,8 @@ const commandMappings = {
   '/transfer': safeCommandHandler(commandHandlers.transfer, 'transfer'),
   '/history': safeCommandHandler(commandHandlers.history, 'history'),
   '/winners': safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'), 
+  '/convert': safeCommandHandler(commandHandlers.convert, 'convert'),
+  '/announce': safeCommandHandler(commandHandlers.sendBonusAnnouncement, 'announce'),
 };
 
 // Register command handlers
@@ -269,6 +384,7 @@ const callbackActions = {
   transfer: safeCommandHandler(commandHandlers.transfer, 'transfer'),
   history: safeCommandHandler(commandHandlers.history, 'history'),
   gamesHistory: safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),  
+  convert: safeCommandHandler(commandHandlers.convert, 'convert'),
 };
 
 // Improved callback query handler with error recovery
