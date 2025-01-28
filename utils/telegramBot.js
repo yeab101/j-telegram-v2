@@ -297,7 +297,7 @@ const commandHandlers = {
           };
 
           bot.on('message', messageHandler);
-          await bot.sendMessage(chatId, `🎁 Your bonus points: ${user.bonus}\nEnter amount to convert (100 bonus = 1 balance):`);
+          await bot.sendMessage(chatId, `🎁 Your bonus points: ${user.bonus}\nEnter amount to convert (100 bonus = 10 birr):`);
         });
       };
 
@@ -460,8 +460,8 @@ const collectTransactionId = async (chatId) => {
 
                     await Promise.all([
                       bot.sendMessage(1982046925, `💰 Deposit request from @${chatId} for ${transactionId}`),
-                      // bot.sendMessage(415285189, `💰 Deposit request from @${chatId} for ${transactionId}`),
-                      // bot.sendMessage(923117728, `💰 Deposit request from @${chatId} for ${transactionId}`)
+                      bot.sendMessage(415285189, `💰 Deposit request from @${chatId} for ${transactionId}`),
+                      bot.sendMessage(923117728, `💰 Deposit request from @${chatId} for ${transactionId}`)
                   ]);
                     resolve();
                 } catch (error) {
