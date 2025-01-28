@@ -277,7 +277,7 @@ const commandHandlers = {
       };
 
       const amount = await collectResponse();
-      const balanceToAdd = amount / 100;
+      const balanceToAdd = amount / 10;
 
       // Update user balance and bonus
       await User.updateOne(
