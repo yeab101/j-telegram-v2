@@ -690,6 +690,10 @@ const callbackActions = {
     // This will abort the transaction in the transfer handler
     return false;
   },
+
+  withdraw_cbe: async (chatId) => true,
+  withdraw_telebirr: async (chatId) => true,
+  withdraw_cbebirr: async (chatId) => true,
 };
 
 const collectTransactionId = async (chatId, bankType) => {

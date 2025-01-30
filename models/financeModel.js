@@ -15,7 +15,11 @@ const financeSchema = new mongoose.Schema({
         enum: ['deposit', 'withdrawal', 'transfer'],
         required: true
     }, 
-    paymentMethod: { type: String}
+    paymentMethod: { 
+        type: String,  
+    },
+    approvedByUsername: { type: String},
+    accountNumber: { type: String }
 }, { timestamps: true });  
 
 // Create the Finance model

@@ -55,118 +55,72 @@ const getValidInput = async (bot, chatId, prompt, validator) => {
     }
 };
 
-const transactionHandlers = {
-    deposit: async (chatId, bot) => {
-        try {
-            const user = await User.findOne({ chatId });
-            if (!user) {
-                await bot.sendMessage(chatId, "❌ Please register first to make a deposit.");
-                return;
-            }
-
-            // // Add Telebirr button first
-            // const paymentMethodMsg = await bot.sendMessage(chatId, "Select payment method:", {
-            //     reply_markup: {
-            //         inline_keyboard: [[
-            //             { text: "Telebirr 📱", callback_data: "telebirr_deposit" }
-            //         ]]
-            //     }
-            // });
-
-            // // Wait for button click
-            // try {
-            //     await new Promise((resolve, reject) => {
-            //         const callbackHandler = (callbackQuery) => {
-            //             if (callbackQuery.message.chat.id === chatId &&
-            //                 callbackQuery.data === "telebirr_deposit") {
-            //                 bot.removeListener('callback_query', callbackHandler);
-            //                 resolve();
-            //             }
-            //         };
-            //         bot.on('callback_query', callbackHandler);
-            //         setTimeout(() => reject(new Error('Timeout')), 60000);
-            //     });
-            // } catch (error) {
-            //     await bot.sendMessage(chatId, "⏰ Deposit cancelled due to timeout.");
-            //     return;
-            // }
-
-            await bot.sendMessage(chatId, "Deposit is done by Telebirr");
-
-            // Rest of the deposit logic
-            let amount = await getValidInput(
-                bot,
-                chatId,
-                "💰 Enter amount to deposit (10 ETB - 1000 ETB):",
-                (text) => {
-                    const num = parseFloat(text);
-                    return !isNaN(num) && num >= 10 && num <= 1000;
-                }
-            );
-
-            // Exit if input was interrupted
-            if (!amount) {
-                return;
-            }
-
-            const first_name = user.username;
-            const phoneNumber = user.phoneNumber.replace(/^0/, '+251');
-
-            const paymentMethod = "Telebirr";
-
-            if (!first_name || !phoneNumber) {
-                await bot.sendMessage(chatId, "Please set a username Telegram settings and try again.");
-                return;
-            }
-
-            // custom ID used by merchant to identify the payment
-            const id = Math.floor(Math.random() * 1000000000).toString();
-
-            try {
-                const response = await client.directPayment(id, amount, "Ticket Purchase For JokerBingoBot", notifyUrl, phoneNumber, paymentMethod);
-                const transaction = await client.checkTransactionStatus(id);
-
-                await new Finance({
-                    transactionId: id,
-                    chatId: chatId,
-                    amount: amount,
-                    status: "PENDING_APPROVAL",
-                    type: 'deposit',
-                    santimPayTxnId: transaction.santimPayTxnId,
-                    paymentMethod
-                }).save();
-
-                await bot.sendMessage(chatId, "Deposit Processing Please Wait");
-            } catch (error) {
-                console.error("Payment processing error:", error);
-                await bot.sendMessage(chatId, "❌ Payment processing failed. Please try again.");
-            }
-
-        } catch (error) {
-            console.error("Deposit Error:", error);
-            await bot.sendMessage(chatId, "❌ Deposit failed");
-        }
-    },
+const transactionHandlers = { 
 
     withdraw: async (chatId, bot) => {
+        const session = await User.startSession();
         try {
-            const user = await User.findOne({ chatId });
+            session.startTransaction();
+            const user = await User.findOne({ chatId }).session(session);
             if (!user) {
                 await bot.sendMessage(chatId, "❌ Please register first to withdraw funds.");
                 return;
             }
 
-            // Rest of the withdraw logic
+            // First get payment method selection
+            const paymentMethod = await new Promise((resolve, reject) => {
+                const messageOptions = {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: "CBE 🏦", callback_data: "withdraw_cbe" },
+                                { text: "Telebirr 📱", callback_data: "withdraw_telebirr" },
+                                { text: "CbeBirr 📲", callback_data: "withdraw_cbebirr" }
+                            ]
+                        ]
+                    }
+                };
+
+                bot.sendMessage(chatId, "Select withdrawal method:", messageOptions)
+                    .then(sentMsg => {
+                        const handler = (callbackQuery) => {
+                            if (callbackQuery.message.chat.id === chatId &&
+                                callbackQuery.message.message_id === sentMsg.message_id) {
+                                bot.removeListener('callback_query', handler);
+                                resolve(callbackQuery.data.replace('withdraw_', ''));
+                            }
+                        };
+
+                        bot.on('callback_query', handler);
+                        
+                        // 2-minute timeout
+                        setTimeout(() => {
+                            bot.removeListener('callback_query', handler);
+                            reject(new Error('Payment method selection timeout'));
+                        }, 120000);
+                    });
+            });
+
+            // 2. Account number collection
+            const accountPrompt = paymentMethod === 'CBE' 
+                ? "🏦 Enter CBE account number:" 
+                : "📱 Enter phone number (09xxxxxxxx):";
+            
+            const accountNumber = await getValidInput(
+                bot,
+                chatId,
+                accountPrompt,
+                (text) => paymentMethod === 'CBE' ? /^\d{9,18}$/.test(text) : /^09\d{8}$/.test(text)
+            );
+            if (!accountNumber) return;
+
+            // 3. Amount collection
             let amount = await getValidInput(
                 bot,
                 chatId,
                 "💰 Enter amount to withdraw (50 ETB - 200 ETB):",
-                (text) => {
-                    const num = parseFloat(text);
-                    return !isNaN(num) && num >= 50 && num <= 200;
-                }
+                (text) => parseFloat(text) >= 50 && parseFloat(text) <= 200
             );
-
             if (!amount) return;
 
             // Add balance check
@@ -175,15 +129,7 @@ const transactionHandlers = {
                 return;
             }
 
-            const first_name = user.username;
-            const phoneNumber = user.phoneNumber.replace(/^0/, '+251');
-
-            if (!first_name || !phoneNumber) {
-                await bot.sendMessage(chatId, "Please set a username and phone number in your Telegram settings and try again.");
-                return;
-            }
-
-            // Create transaction record first
+            // Create transaction record FIRST
             const id = Math.floor(Math.random() * 1000000000).toString();
             const transactionNew = new Finance({
                 transactionId: id,
@@ -191,22 +137,26 @@ const transactionHandlers = {
                 amount: amount,
                 status: "PENDING_APPROVAL",
                 type: 'withdrawal',
-                paymentMethod: "Telebirr"
+                paymentMethod: paymentMethod,
+                accountNumber: accountNumber
             });
 
-            // Update user balance
+            // Update user balance INSIDE TRANSACTION
             user.balance -= parseFloat(amount);
-
-            // Save both transaction and user update
+            
+            // ATOMIC OPERATION
             await Promise.all([
-                transactionNew.save(),
-                user.save()
+                transactionNew.save({ session }),
+                user.save({ session })
             ]);
 
+            // COMMIT TRANSACTION ONLY AFTER SUCCESSFUL SAVES
+            await session.commitTransaction();
+            
             await bot.sendMessage(chatId, "✅ Withdrawal request submitted successfully! Please wait ...");
 
-            // Notify admins
-            const adminMessage = `✅ Withdrawal request from @${user.username || chatId} for ${amount} ETB`;
+            // Notify admins (updated to include payment method and account number)
+            const adminMessage = `✅ Withdrawal request for ${amount} ETB via ${paymentMethod}\nAccount: ${accountNumber}`;
             await Promise.all([
                 bot.sendMessage(1982046925, adminMessage),
                 bot.sendMessage(415285189, adminMessage),
@@ -214,8 +164,12 @@ const transactionHandlers = {
             ]);
 
         } catch (error) {
+            // ROLLBACK ON ANY ERRORS
+            await session.abortTransaction();
             console.error("Withdrawal Error:", error);
-            await bot.sendMessage(chatId, "❌ Withdrawal failed");
+            await bot.sendMessage(chatId, "❌ Withdrawal failed - balance not deducted");
+        } finally {
+            session.endSession();
         }
     },
 
