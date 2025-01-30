@@ -228,6 +228,28 @@ const transactionHandlers = {
                 return;
             }
 
+            // SWAPPED ORDER: PHONE FIRST THEN AMOUNT
+            const recipientPhone = await getValidInput(
+                bot,
+                chatId,
+                "Enter receivers's phone number (format: 09xxxxxxxx):",
+                (text) => /^09\d{8}$/.test(text)
+            );
+
+            // Find recipient by phone number FIRST
+            const recipient = await User.findOne({ phoneNumber: recipientPhone }).session(session);
+            if (!recipient) {
+                await bot.sendMessage(chatId, "Recipient not found. Please check the phone number and try again.");
+                return;
+            }
+
+            // Prevent self-transfer EARLIER IN FLOW
+            if (recipient.chatId === chatId) {
+                await bot.sendMessage(chatId, "You cannot transfer to yourself.");
+                return;
+            }
+
+            // NOW GET AMOUNT AFTER RECIPIENT VERIFICATION
             const amount = await getValidInput(
                 bot,
                 chatId,
@@ -238,32 +260,49 @@ const transactionHandlers = {
                 }
             );
 
-            // Check if sender has sufficient balance
+            // Check if sender has sufficient balance (UNCHANGED)
             if (sender.balance < parseFloat(amount)) {
                 await bot.sendMessage(chatId, "Insufficient balance for this transfer.");
                 return;
             }
 
-            const recipientPhone = await getValidInput(
-                bot,
-                chatId,
-                "Enter recipient's phone number (format: 09xxxxxxxx):",
-                (text) => /^09\d{8}$/.test(text)
-            );
+            // AFTER GETTING RECIPIENT PHONE NUMBER, ADD CONFIRMATION STEP
+            await session.startTransaction();
+            
+            // Create confirmation message
+            const confirmMessage = `⚠️ Confirm Transfer:\nAmount: ${amount} ETB\nTo: ${recipientPhone}`;
+            
+            // Send confirmation with buttons
+            const { message_id } = await bot.sendMessage(chatId, confirmMessage, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: "✅ Confirm Transfer", callback_data: "confirm_transfer" }],
+                        [{ text: "❌ Cancel", callback_data: "cancel_transfer" }]
+                    ]
+                }
+            });
 
-            // Find recipient by phone number
-            const recipient = await User.findOne({ phoneNumber: recipientPhone }).session(session);
-            if (!recipient) {
-                await bot.sendMessage(chatId, "Recipient not found. Please check the phone number and try again.");
+            // Wait for confirmation
+            const confirmed = await new Promise((resolve) => {
+                const handler = async (callbackQuery) => {
+                    if (callbackQuery.message.chat.id === chatId && 
+                        callbackQuery.message.message_id === message_id) {
+                        resolve(callbackQuery.data === "confirm_transfer");
+                    }
+                };
+                bot.on('callback_query', handler);
+                
+                // 2-minute timeout
+                setTimeout(() => resolve(false), 120000);
+            });
+
+            if (!confirmed) {
+                await session.abortTransaction();
+                await bot.sendMessage(chatId, "❌ Transfer cancelled");
                 return;
             }
 
-            // Prevent self-transfer
-            if (recipient.chatId === chatId) {
-                await bot.sendMessage(chatId, "You cannot transfer to yourself.");
-                return;
-            }
-
+            // PROCEED WITH EXISTING TRANSFER LOGIC ONLY AFTER CONFIRMATION
             // Atomic transfer operation
             sender.balance -= parseFloat(amount);
             recipient.balance += parseFloat(amount);

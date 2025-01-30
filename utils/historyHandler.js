@@ -40,7 +40,7 @@ const historyHandlers = {
                     details += ` \n Error: ${transaction?.status}`;
                 }
 
-                const message = `${index + 1}. ${date} \n ${type} \n Amount: ${amount} Birr \n Status: ${status}${details}`;
+                const message = `${index + 1}. ${date} \n ID: ${transaction.transactionId} \n ${type} \n Amount: ${amount} Birr \n Status: ${status}${details}`;
 
                 // Add a small delay to prevent flooding
                 await new Promise(resolve => setTimeout(resolve, 100));

@@ -335,40 +335,70 @@ const commandHandlers = {
 
   sendBonusAnnouncement: async (chatId) => {
     try {
-      // Security: Only allow admins to send announcements
+      // Admin verification
       const adminUser = await User.findOne({ chatId, role: 1 });
       if (!adminUser) {
         await bot.sendMessage(chatId, "❌ Admin privileges required");
         return;
       }
 
-      // Batch processing with rate limiting
-      const users = await User.find({}, 'chatId bonus');
-      const BATCH_SIZE = 10;
-      const DELAY_MS = 1000;
+      // Collect announcement message
+      const collectMessage = () => {
+        return new Promise(async (resolve, reject) => {
+          const timeout = setTimeout(() => {
+            bot.removeListener('message', messageHandler);
+            reject(new Error('Message input timeout'));
+          }, 300000); // 5 minutes timeout
 
-      for (let i = 0; i < users.length; i += BATCH_SIZE) {
-        const batch = users.slice(i, i + BATCH_SIZE);
+          const messageHandler = async (msg) => {
+            if (msg.chat.id === chatId) {
+              if (msg.text === '/cancel') {
+                clearTimeout(timeout);
+                bot.removeListener('message', messageHandler);
+                reject(new Error('Cancelled by user'));
+                return;
+              }
 
-        await Promise.all(batch.map(async (user) => {
-          try {
-            await bot.sendMessage(
-              user.chatId,
-              `🎉 Your bonus points: ${Math.floor(user.bonus)}\n\n` +
-              `Use /convert to turn bonuses into playable balance!` +
-              `\n\n🎁 100 bonus points = 10 birr`
-            );
-          } catch (error) {
-            console.error(`Failed to send to ${user.chatId}:`, error.message);
-          }
-        }));
+              clearTimeout(timeout);
+              bot.removeListener('message', messageHandler);
+              resolve(msg.text);
+            }
+          };
 
-        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-      }
-      await bot.sendMessage(chatId, `✅ Announcement sent to ${users.length} users`);
+          bot.on('message', messageHandler);
+          await bot.sendMessage(chatId, 
+            "📢 Enter your announcement message (or /cancel to abort):\n" +
+            "Max 400 characters", {
+            reply_markup: { force_reply: true }
+          });
+        });
+      };
+
+      // Get message from admin
+      const announcementText = (await collectMessage()).slice(0, 400);
+      
+      // Confirmation step
+      await bot.sendMessage(chatId, `⚠️ Confirm send this to all users?:\n\n${announcementText}`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "✅ Confirm Send", callback_data: "confirm_announce" }],
+            [{ text: "❌ Cancel", callback_data: "cancel_announce" }]
+          ]
+        }
+      });
+
+      // Store pending announcement in admin user object
+      await User.findByIdAndUpdate(adminUser._id, {
+        pendingAnnouncement: announcementText
+      });
+
     } catch (error) {
-      console.error('Announcement error:', error);
-      await bot.sendMessage(chatId, "❌ Failed to send announcements");
+      const errorMessage = error.message === 'Message input timeout' 
+        ? "⏰ Announcement creation timed out"
+        : error.message === 'Cancelled by user'
+        ? "❌ Announcement cancelled"
+        : "❌ Announcement failed";
+      await bot.sendMessage(chatId, errorMessage);
     }
   },
 
@@ -609,6 +639,57 @@ const callbackActions = {
       await session.endSession();
     }
   }, 'change_phonenumber'),
+  confirm_announce: async (chatId) => {
+    const adminUser = await User.findOne({ chatId, role: 1 });
+    if (!adminUser?.pendingAnnouncement) return;
+
+    try {
+      const users = await User.find({}, 'chatId').lean();
+      const BATCH_SIZE = 20;
+      const DELAY_MS = 2000;
+      let successCount = 0;
+
+      for (let i = 0; i < users.length; i += BATCH_SIZE) {
+        const batch = users.slice(i, i + BATCH_SIZE);
+        
+        const results = await Promise.allSettled(batch.map(async (user) => {
+          try {
+            await bot.sendMessage(user.chatId, adminUser.pendingAnnouncement);
+            return true;
+          } catch (error) {
+            console.error(`Failed to send to ${user.chatId}: ${error.message}`);
+            return false;
+          }
+        }));
+
+        successCount += results.filter(r => r.status === 'fulfilled' && r.value).length;
+        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+      }
+
+      await bot.sendMessage(chatId, `📢 Announcement sent to ${successCount}/${users.length} users`);
+      
+    } catch (error) {
+      console.error('Broadcast error:', error);
+      await bot.sendMessage(chatId, "❌ Error sending announcements");
+    } finally {
+      await User.findByIdAndUpdate(adminUser._id, { $unset: { pendingAnnouncement: 1 } });
+    }
+  },
+
+  cancel_announce: async (chatId) => {
+    await User.updateOne({ chatId }, { $unset: { pendingAnnouncement: 1 } });
+    await bot.sendMessage(chatId, "❌ Announcement cancelled");
+  },
+
+  confirm_transfer: async (chatId) => {
+    // This will be handled within the transfer flow's Promise resolution
+    return true;
+  },
+
+  cancel_transfer: async (chatId) => {
+    // This will abort the transaction in the transfer handler
+    return false;
+  },
 };
 
 const collectTransactionId = async (chatId, bankType) => {
