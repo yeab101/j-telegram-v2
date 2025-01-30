@@ -623,11 +623,7 @@ const collectTransactionId = async (chatId, bankType) => {
       if (msg.chat.id === chatId) {
         const transactionId = msg.text.trim();
 
-        // Bank-specific validation
-        if (bankType === 'CBE' && !transactionId.toLowerCase().startsWith('https')) {
-          await bot.sendMessage(chatId, "❌ CBE transactions must start with 'https'. Try again:");
-          return;
-        }
+
 
         // Basic length validation
         if (transactionId.length < 4) {
