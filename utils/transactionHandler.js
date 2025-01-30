@@ -273,6 +273,8 @@ const transactionHandlers = {
                 type: 'transfer',
                 paymentMethod: "InAppTransfer"
             }).save({ session });
+ 
+            await session.commitTransaction();
 
             // Notify both parties
             await Promise.all([
