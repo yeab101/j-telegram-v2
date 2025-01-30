@@ -77,7 +77,7 @@ const commandHandlers = {
           [{ text: "Play 🎮", web_app: { url: `${baseUrl}/room?token=${chatId}` } }, { text: "Register 👤", callback_data: "register" }, { text: "Join Group ", url: "https://t.me/jokerbingo_bot_group" }],
           [{ text: "Deposit 💸", callback_data: "deposit" }, { text: "Withdraw 💁‍♂️", callback_data: "withdraw" }, { text: "Transfer 💳", callback_data: "transfer" }],
           [{ text: "Balance 💰", callback_data: "balance" }, { text: "Winners 🎉", callback_data: "gamesHistory" }, { text: "Transactions", callback_data: "history" }],
-          [{ text: "Convert 💱", callback_data: "convert" }]
+          [{ text: "Convert 💱", callback_data: "convert" }, { text: "My Profile 👤", callback_data: "myprofile" }]
         ]
       }
     });
@@ -227,25 +227,23 @@ const commandHandlers = {
         return;
       }
 
-      // First send the tutorial GIF
       const tutorialGifPath = path.join(__dirname, 'tutorial.gif');
       await bot.sendAnimation(chatId, tutorialGifPath);
 
-      const accountNumber = "1000186729785";
-      
       await bot.sendMessage(chatId, 
-        `🏦 Commercial Bank of Ethiopia Account Number:\n\`${accountNumber}\`\n\n` +
-        "Deposit ለማድረግ የፈለጉትን ብር ወደዚህ የንግድባንክ አካውንት ብር ካስገቡ በኋላ https://.... ብሎ የሚጀምረዉን የትራንዛክሽን ቁጥር  ያስገቡት ",
+        "🏦 Choose your deposit method:",
         {
           parse_mode: "Markdown",
           reply_markup: {
-            inline_keyboard: [ 
-              [{ text: "እዚ ላይ ያስገቡት 👇👇👇", callback_data: "submit_transaction" }]
+            inline_keyboard: [
+              [
+                { text: "CBE", callback_data: "deposit_cbe" },
+                { text: "Telebirr", callback_data: "deposit_telebirr" }
+              ]
             ]
           }
         }
       );
-
     } catch (error) {
       console.error("Deposit Error:", error);
       await bot.sendMessage(chatId, "❌ An error occurred. Please try again.");
@@ -373,13 +371,43 @@ const commandHandlers = {
       await bot.sendMessage(chatId, "❌ Failed to send announcements");
     }
   },
+
+  // Updated profile handler
+  showMyProfile: async (chatId) => {
+    try {
+      const user = await User.findOne({ chatId });
+      if (!user) {
+        await bot.sendMessage(chatId, "❌ User not found. Please register first.");
+        return;
+      }
+
+      const profileMessage = `👤 Your Profile:\n\n` +
+        `🆔 ID : ${user.chatId}\n` +
+        `📱 Phone : ${user.phoneNumber}\n` +
+        `👤 Username: @${user.username}`;
+
+      await bot.sendMessage(chatId, profileMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✏️ Change Username", callback_data: "change_username" },
+              { text: "📱 Change Phone", callback_data: "change_phonenumber" }
+            ]
+          ]
+        }
+      });
+    } catch (error) {
+      console.error('Profile Error:', error);
+      await bot.sendMessage(chatId, "❌ Failed to retrieve profile");
+    }
+  },
 };
 
 // Updated command mappings with proper error handling
 const commandMappings = {
   '/start': safeCommandHandler(async (chatId) => {
     await commandHandlers.sendMainMenu(chatId);
-  }, 'start'),
+  }, 'start'), 
   '/play': safeCommandHandler(commandHandlers.play, 'play'),
   '/register': safeCommandHandler(commandHandlers.register, 'register'),
   '/balance': safeCommandHandler(commandHandlers.checkBalance, 'balance'),
@@ -390,6 +418,7 @@ const commandMappings = {
   '/winners': safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),
   '/convert': safeCommandHandler(commandHandlers.convert, 'convert'),
   '/announce': safeCommandHandler(commandHandlers.sendBonusAnnouncement, 'announce'),
+  '/myprofile': safeCommandHandler(commandHandlers.showMyProfile, 'myprofile'),
 };
 
 // Register command handlers
@@ -411,10 +440,46 @@ const callbackActions = {
   history: safeCommandHandler(commandHandlers.history, 'history'),
   gamesHistory: safeCommandHandler(commandHandlers.gamesHistory, 'gamesHistory'),
   convert: safeCommandHandler(commandHandlers.convert, 'convert'),
-  submit_transaction: async (chatId) => {
-    await bot.sendMessage(chatId, "📝 Please enter your CBE transaction ID:");
-    await collectTransactionId(chatId);
+  deposit_cbe: async (chatId) => {
+    const accountNumber = "1000186729785";
+    await bot.sendMessage(chatId,
+      `🏦 CBE Account:\n\`${accountNumber}\`\n\n` +
+      "After transfer, click below to submit transaction ID:",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Submit CBE Transaction", callback_data: "submit_cbe_transaction" }]
+          ]
+        }
+      }
+    );
   },
+  
+  deposit_telebirr: async (chatId) => {
+    const accountNumber = "0976813965";
+    await bot.sendMessage(chatId,
+      `📱 Telebirr Account:\n\`${accountNumber}\`\n\n` +
+      "After transfer, click below to submit transaction ID:",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Submit Telebirr Transaction", callback_data: "submit_telebirr_transaction" }]
+          ]
+        }
+      }
+    );
+  },
+
+  submit_cbe_transaction: async (chatId) => {
+    await bot.sendMessage(chatId, "📝 Enter CBE transaction ID (starts with https):");
+    await collectTransactionId(chatId, 'CBE');
+  },
+
+  submit_telebirr_transaction: async (chatId) => {
+    await bot.sendMessage(chatId, "📝 Enter Telebirr transaction ID:");
+    await collectTransactionId(chatId, 'Telebirr');
+  },
+
   copy_1000186729785: async (chatId, query) => {
     try {
       await bot.answerCallbackQuery(query.id, {
@@ -424,10 +489,129 @@ const callbackActions = {
     } catch (error) {
       console.error("Copy callback error:", error);
     }
-  }
+  },
+  myprofile: safeCommandHandler(commandHandlers.showMyProfile, 'myprofile'),
+  change_username: safeCommandHandler(async (chatId) => {
+    const session = await User.startSession();
+    await session.startTransaction();
+    
+    try {
+      const collectResponse = async () => {
+        return new Promise(async (resolve, reject) => {
+          const timeout = setTimeout(() => {
+            bot.removeListener('message', messageHandler);
+            reject(new Error('Username change timeout'));
+          }, 120000);
+
+          const messageHandler = async (msg) => {
+            if (msg.chat.id === chatId) {
+              const newUsername = msg.text.trim();
+              
+              if (newUsername.length < 3 || newUsername.length > 20) {
+                await bot.sendMessage(chatId, 
+                  "❌ Username must be 3-20 characters. Try again:");
+                return;
+              }
+
+              const existingUser = await User.findOne({ username: newUsername }).session(session);
+              if (existingUser) {
+                await bot.sendMessage(chatId, 
+                  "❌ Username already taken. Try another one:");
+                return;
+              }
+
+              clearTimeout(timeout);
+              bot.removeListener('message', messageHandler);
+              resolve(newUsername);
+            }
+          };
+
+          bot.on('message', messageHandler);
+          await bot.sendMessage(chatId, 
+            "Enter new username (3-20 characters):");
+        });
+      };
+
+      const newUsername = await collectResponse();
+      await User.updateOne({ chatId }, { username: newUsername }).session(session);
+      await session.commitTransaction();
+      
+      await bot.sendMessage(chatId, "✅ Username updated successfully!");
+      commandHandlers.showMyProfile(chatId);
+
+    } catch (error) {
+      await session.abortTransaction();
+      await bot.sendMessage(chatId, error.message === 'Username change timeout' 
+        ? "⏰ Username change timed out" 
+        : "❌ Username update failed");
+    } finally {
+      await session.endSession();
+    }
+  }, 'change_username'),
+  
+  change_phonenumber: safeCommandHandler(async (chatId) => {
+    const session = await User.startSession();
+    await session.startTransaction();
+    
+    try {
+      const validatePhoneNumber = (number) => /^09[0-9]{8}$/.test(number);
+      
+      const collectResponse = async () => {
+        return new Promise(async (resolve, reject) => {
+          const timeout = setTimeout(() => {
+            bot.removeListener('message', messageHandler);
+            reject(new Error('Phone change timeout'));
+          }, 120000);
+
+          const messageHandler = async (msg) => {
+            if (msg.chat.id === chatId) {
+              if (!validatePhoneNumber(msg.text)) {
+                await bot.sendMessage(chatId, 
+                  "❌ Invalid format. Must start with 09 and 10 digits. Try again:");
+                return;
+              }
+
+              const existingUser = await User.findOne({ 
+                phoneNumber: msg.text 
+              }).session(session);
+              
+              if (existingUser) {
+                await bot.sendMessage(chatId, 
+                  "❌ Phone number already registered. Try another one:");
+                return;
+              }
+
+              clearTimeout(timeout);
+              bot.removeListener('message', messageHandler);
+              resolve(msg.text);
+            }
+          };
+
+          bot.on('message', messageHandler);
+          await bot.sendMessage(chatId, 
+            "Enter new phone number (09xxxxxxxx):");
+        });
+      };
+
+      const newPhone = await collectResponse();
+      await User.updateOne({ chatId }, { phoneNumber: newPhone }).session(session);
+      await session.commitTransaction();
+      
+      await bot.sendMessage(chatId, "✅ Phone number updated successfully!");
+      commandHandlers.showMyProfile(chatId);
+
+    } catch (error) {
+      await session.abortTransaction();
+      await bot.sendMessage(chatId, error.message === 'Phone change timeout' 
+        ? "⏰ Phone change timed out" 
+        : "❌ Phone number update failed");
+    } finally {
+      await session.endSession();
+    }
+  }, 'change_phonenumber'),
 };
 
-const collectTransactionId = async (chatId) => {
+const collectTransactionId = async (chatId, bankType) => {
   return new Promise(async (resolve, reject) => {
     const timeout = setTimeout(() => {
       bot.removeListener('message', messageHandler);
@@ -439,9 +623,9 @@ const collectTransactionId = async (chatId) => {
       if (msg.chat.id === chatId) {
         const transactionId = msg.text.trim();
 
-        // Enhanced validation for transaction ID
-        if (!transactionId.toLowerCase().startsWith('https')) {
-          await bot.sendMessage(chatId, "❌ Invalid transaction ID. Transaction ID must start with 'https'. Please enter a valid one:");
+        // Bank-specific validation
+        if (bankType === 'CBE' && !transactionId.toLowerCase().startsWith('https')) {
+          await bot.sendMessage(chatId, "❌ CBE transactions must start with 'https'. Try again:");
           return;
         }
 
@@ -463,7 +647,7 @@ const collectTransactionId = async (chatId) => {
           await DepositRequest.create({
             transactionId,
             chatId,
-            bank: 'CBE'
+            bank: bankType
           });
 
           clearTimeout(timeout);
@@ -474,9 +658,9 @@ const collectTransactionId = async (chatId) => {
           );
 
           await Promise.all([
-            bot.sendMessage(1982046925, `💰 Deposit request from @${chatId} for ${transactionId}`),
-            bot.sendMessage(415285189, `💰 Deposit request from @${chatId} for ${transactionId}`),
-            bot.sendMessage(923117728, `💰 Deposit request from @${chatId} for ${transactionId}`)
+            bot.sendMessage(1982046925, `💰 New ${bankType} deposit from @${chatId}: ${transactionId}`),
+            bot.sendMessage(415285189, `💰 New ${bankType} deposit from @${chatId}: ${transactionId}`),
+            bot.sendMessage(923117728, `💰 New ${bankType} deposit from @${chatId}: ${transactionId}`)
           ]);
           resolve();
         } catch (error) {
