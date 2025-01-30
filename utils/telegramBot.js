@@ -486,9 +486,11 @@ const callbackActions = {
   },
   
   deposit_telebirr: async (chatId) => {
-    const accountNumber = "0976813965";
+    const accountNumber = "0967813965";
+    const cbeAccountNumber = "1000186729785";
     await bot.sendMessage(chatId,
-      `📱 Telebirr Account:\n\`${accountNumber}\`\n\n` +
+      `📱Telebirr Account:\n\`${accountNumber}\`\n\n` +
+      `OR 📱From Telebirr to this CBE Account:\n\`${cbeAccountNumber}\`\n\n` +
       "After transfer, click below to submit transaction ID:",
       {
         reply_markup: {
