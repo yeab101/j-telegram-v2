@@ -102,9 +102,7 @@ const transactionHandlers = {
             });
 
             // 2. Account number collection
-            const accountPrompt = paymentMethod === 'CBE' 
-                ? "🏦 Enter CBE account number:" 
-                : "📱 Enter phone number (09xxxxxxxx):";
+            const accountPrompt = "Enter account number for Bank or Phone number for Telebirr/CbeBirr:"
             
             const accountNumber = await getValidInput(
                 bot,
