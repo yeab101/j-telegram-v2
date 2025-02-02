@@ -1,4 +1,4 @@
-const mongoose = require("mongoose"); 
+const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
 const userSchema = new Schema({
@@ -6,11 +6,11 @@ const userSchema = new Schema({
         type: Number,
         required: true,
         unique: true,
+        index: true
     },
     phoneNumber: {
-        type: String,
-        // required: true,
-        unique: true,
+        type: String, 
+        unique: true, 
     },
     username: {
         type: String,
@@ -35,10 +35,15 @@ const userSchema = new Schema({
         type: Number,
         default: 0
     },
+    bonusReceived: {
+        type: Boolean,
+        default: false
+    },
     role: {
         type: Boolean,
         default: 0  // 0 = player, 1 = admin
     }
+
 }, {
     timestamps: true,
 });
@@ -46,4 +51,3 @@ const userSchema = new Schema({
 const User = mongoose.model("User", userSchema);
 
 module.exports = User;
-

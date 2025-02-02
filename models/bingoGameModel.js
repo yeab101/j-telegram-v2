@@ -14,7 +14,7 @@ const generateRandomNumbers = () => {
 
 // Function to generate random 4 digit number
 const generateGameId = () => {
-  return Math.floor(10000 + Math.random() * 90000);
+  return Math.floor(100000 + Math.random() * 900000);
 };
 
 const bingoGameSchema = new mongoose.Schema({
@@ -55,10 +55,14 @@ const bingoGameSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User'
   },
+  winnerUsername: {
+    type: String,
+    default: null
+  },
   gameStatus: {
     type: String,
     default: "waiting",
-    enum: ["waiting", "started", "finished"]
+    enum: ["waiting", "started", "verifying", "finished"]
   }, 
   calledNumbers: { 
     type: [Number]

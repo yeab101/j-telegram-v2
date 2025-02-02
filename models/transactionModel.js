@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 
-const transactionSchema = new mongoose.Schema({
-    // User related fields
+const transactionSchema = new mongoose.Schema({ 
     user_id: {
         type: String,
         required: true,
@@ -10,9 +9,7 @@ const transactionSchema = new mongoose.Schema({
     username: {
         type: String,
         required: true
-    },
-
-    // Transaction details
+    }, 
     transaction_id: {
         type: String,
         required: true,
@@ -32,9 +29,7 @@ const transactionSchema = new mongoose.Schema({
         type: String,
         enum: ['pending', 'completed', 'failed'],
         default: 'pending'
-    },
-
-    // Game related fields
+    }, 
     game: {
         type: String,
         default: 'Bingo'
@@ -47,9 +42,7 @@ const transactionSchema = new mongoose.Schema({
     currency: {
         type: String,
         default: 'ETB'
-    },
-
-    // Optional fields for credit/rollback
+    }, 
     debit_transaction_id: String,
     debit_round_id: String,
     
