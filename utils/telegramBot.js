@@ -741,10 +741,10 @@ const callbackActions = {
         const messageHandler = async (msg) => {
           if (msg.chat.id === chatId) {
             const amount = parseFloat(msg.text);
-            // if (isNaN(amount) || amount < 10) {
-            //   await bot.sendMessage(chatId, "❌ Minimum deposit is 10 ETB. Enter amount:");
-            //   return;
-            // }
+            if (isNaN(amount) || amount < 10 || amount > 1000) {
+              await bot.sendMessage(chatId, "❌ Amount must be between 10 - 1000 ETB. Enter amount:");
+              return;
+            }
 
             clearTimeout(timeout);
             bot.removeListener('message', messageHandler);

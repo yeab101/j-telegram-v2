@@ -245,10 +245,10 @@ const transactionHandlers = {
             const amount = await getValidInput(
                 bot,
                 chatId,
-                "Enter amount to transfer (30 ETB - 2000 ETB):",
+                "Enter amount to transfer (20 ETB - 1000 ETB):",
                 (text) => {
                     const num = parseFloat(text);
-                    return !isNaN(num) && num >= 30 && num <= 2000;
+                    return !isNaN(num) && num >= 20 && num <= 1000;
                 }
             );
 
