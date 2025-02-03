@@ -187,7 +187,8 @@ const transactionHandlers = {
                         console.error(error);
                         reject(new Error('Payment processing failed'));
                     });
-            });
+            }); 
+            // new old 
 
             // COMMIT TRANSACTION ONLY AFTER SUCCESSFUL SAVES AND PAYMENT PROCESSING
             await session.commitTransaction();
