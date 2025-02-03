@@ -2,18 +2,6 @@ const User = require("../models/userModel");
 const Finance = require("../models/financeModel.js");
 const SantimpaySdk = require("../lib/index.js");
 
-// // Santim Test
-// const PRIVATE_KEY_IN_PEM = `
-// -----BEGIN EC PRIVATE KEY-----
-// MHcCAQEEIF1FiolOiNt9VZga7Xv2Hnc9ogec+n17oAC7vtls3fBuoAoGCCqGSM49
-// AwEHoUQDQgAEEcfE9DYOz/pkenjJ4Abdgr2BsYB5zhh+3RxlHA+ZDlQ63+RTJS2B
-// A2vqUeASic2BPMd+LqrAlo+5nCLqdBm//g==
-// -----END EC PRIVATE KEY-----
-// `
-
-// const GATEWAY_MERCHANT_ID = "9e2dab64-e2bb-4837-9b85-d855dd878d2b"
-
-
 const PRIVATE_KEY_IN_PEM = `
 -----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIFamQMQ/56tZuX6sZQBzxxs4EbH9ndELv14JMo6fkfR0oAoGCCqGSM49
@@ -22,11 +10,9 @@ bFpzTyPzIa0JE/MULNEx0rjnia3FntuoiA==
 -----END EC PRIVATE KEY-----
 `
 
-const GATEWAY_MERCHANT_ID = "27dcd443-1e6f-46d0-8cc3-5918b333dc2b";
-
-
+const GATEWAY_MERCHANT_ID = process.env.GATEWAY_MERCHANT_ID;
 const client = new SantimpaySdk(GATEWAY_MERCHANT_ID, PRIVATE_KEY_IN_PEM);
-const notifyUrl = "https://jbackend-v2.onrender.com/api/callback/verify-transaction/withdraw";
+const notifyUrl = "https://jbackend-v2.onrender.com/api/callback/verify-transaction";
 
 const getValidInput = async (bot, chatId, prompt, validator) => {
     while (true) {
@@ -87,9 +73,14 @@ const transactionHandlers = {
                         inline_keyboard: [
                             // Automatic pyment method
                             [
-                                { text: "Telebirr SantimPay 💳", callback_data: "withdraw_telebirr" }
+                                { text: "SantimPay 💳", callback_data: "withdraw_santimpay" } 
+                            ],
+                            // manual payment method
+                            [ 
+                                { text: "Telebirr 📱", callback_data: "withdraw_telebirr" },
+                                { text: "CbeBirr 📲", callback_data: "withdraw_cbebirr" }
                             ]
-
+                           
                         ]
                     }
                 };
@@ -105,7 +96,7 @@ const transactionHandlers = {
                         };
 
                         bot.on('callback_query', handler);
-
+                        
                         // 2-minute timeout
                         setTimeout(() => {
                             bot.removeListener('callback_query', handler);
@@ -114,12 +105,22 @@ const transactionHandlers = {
                     });
             });
 
+            // Uncomment and modify SantimPay handling
+            if (paymentMethod === 'santimpay') {
+                await bot.sendMessage(chatId, "🚧 SantimPay withdrawals are coming soon! Please try another method.");
+                await session.abortTransaction();
+                return;  // Add explicit return
+            }
+
             // 2. Account number collection
             let accountPrompt;
             let validator;
-
+            
             if (paymentMethod === 'telebirr') {
-                accountPrompt = "📱 Enter Telebirr phone number to withdraw money";
+                accountPrompt = "📱 Enter Telebirr phone number (09xxxxxxxx):";
+                validator = (text) => /^09\d{8}$/.test(text);
+            } else if (paymentMethod === 'cbebirr') {
+                accountPrompt = "📲 Enter CbeBirr phone number (09xxxxxxxx):";
                 validator = (text) => /^09\d{8}$/.test(text);
             } else {
                 await bot.sendMessage(chatId, "🚧 This withdrawal method is coming soon!");
@@ -130,18 +131,14 @@ const transactionHandlers = {
             const accountNumber = await getValidInput(bot, chatId, accountPrompt, validator);
             if (!accountNumber) return;
 
-            // NEW FORMATTING LOGIC
-            const formattedAccount = accountNumber.replace(/^0/, '+251');
-
             // 3. Amount collection
             let amount = await getValidInput(
                 bot,
                 chatId,
-                "💰 Enter amount to withdraw (30 ETB - 2000 ETB):",
-                (text) => parseFloat(text) >= 1 && parseFloat(text) <= 2000
+                "💰 Enter amount to withdraw (50 ETB - 200 ETB):",
+                (text) => parseFloat(text) >= 50 && parseFloat(text) <= 200
             );
             if (!amount) return;
-
 
             // Add balance check
             if (user.balance < parseFloat(amount)) {
@@ -155,45 +152,28 @@ const transactionHandlers = {
                 transactionId: id,
                 chatId: chatId,
                 amount: amount,
-                status: "COMPLETED",
+                status: "PENDING_APPROVAL",
                 type: 'withdrawal',
                 paymentMethod: paymentMethod,
-                accountNumber: formattedAccount
+                accountNumber: accountNumber
             });
 
             // Update user balance INSIDE TRANSACTION
             user.balance -= parseFloat(amount);
-
+            
             // ATOMIC OPERATION
             await Promise.all([
                 transactionNew.save({ session }),
                 user.save({ session })
             ]);
 
-            // Wrap Santimpay transaction in session-aware promise
-            await new Promise((resolve, reject) => {
-                client.sendToCustomer(id, amount, "withdrawal", formattedAccount, "Telebirr", notifyUrl)
-                    .then(async response => {
-                        console.log("response", response);
-                        const transaction = await client.checkTransactionStatus(id);
-                        console.log("Transaction: ", transaction);
-                        
-                        if (transaction.status !== 'COMPLETED') {
-                            throw new Error('Santimpay transaction failed');
-                        }
-                        resolve();
-                    })
-                    .catch(error => {
-                        console.error(error);
-                        reject(new Error('Payment processing failed'));
-                    });
-            });
-
-            // COMMIT TRANSACTION ONLY AFTER SUCCESSFUL SAVES AND PAYMENT PROCESSING
+            // COMMIT TRANSACTION ONLY AFTER SUCCESSFUL SAVES
             await session.commitTransaction();
+            
+            await bot.sendMessage(chatId, "✅ Withdrawal  submitted successfully! Please wait ...");
 
-            // Moved admin notifications AFTER successful commit
-            const adminMessage = `✅ Withdraw Approved for @${user.username || chatId}. Amount: ${amount} Birr \nPhone: ${formattedAccount}`;
+            // Notify admins (updated to include payment method and account number)
+            const adminMessage = `✅ Withdrawal  for ${amount} ETB via ${paymentMethod}\nAccount: ${accountNumber}`;
             await Promise.all([
                 bot.sendMessage(1982046925, adminMessage),
                 bot.sendMessage(415285189, adminMessage),
@@ -204,7 +184,7 @@ const transactionHandlers = {
             // ROLLBACK ON ANY ERRORS
             await session.abortTransaction();
             console.error("Withdrawal Error:", error);
-            await bot.sendMessage(chatId, "❌ Withdrawal failed - balance reversed. Please try again...");
+            await bot.sendMessage(chatId, "❌ Withdrawal failed - balance not deducted");
         } finally {
             session.endSession();
         }
@@ -244,10 +224,10 @@ const transactionHandlers = {
             const amount = await getValidInput(
                 bot,
                 chatId,
-                "Enter amount to transfer (30 ETB - 2000 ETB):",
+                "Enter amount to transfer (30 ETB - 10000 ETB):",
                 (text) => {
                     const num = parseFloat(text);
-                    return !isNaN(num) && num >= 30 && num <= 2000;
+                    return !isNaN(num) && num >= 30 && num <= 10000;
                 }
             );
 
@@ -259,10 +239,10 @@ const transactionHandlers = {
 
             // AFTER GETTING RECIPIENT PHONE NUMBER, ADD CONFIRMATION STEP
             await session.startTransaction();
-
+            
             // Create confirmation message
             const confirmMessage = `⚠️ Confirm Transfer:\nAmount: ${amount} ETB\nTo: ${recipientPhone}`;
-
+            
             // Send confirmation with buttons
             const { message_id } = await bot.sendMessage(chatId, confirmMessage, {
                 reply_markup: {
@@ -276,13 +256,13 @@ const transactionHandlers = {
             // Wait for confirmation
             const confirmed = await new Promise((resolve) => {
                 const handler = async (callbackQuery) => {
-                    if (callbackQuery.message.chat.id === chatId &&
+                    if (callbackQuery.message.chat.id === chatId && 
                         callbackQuery.message.message_id === message_id) {
                         resolve(callbackQuery.data === "confirm_transfer");
                     }
                 };
                 bot.on('callback_query', handler);
-
+                
                 // 2-minute timeout
                 setTimeout(() => resolve(false), 120000);
             });
@@ -312,7 +292,7 @@ const transactionHandlers = {
                 type: 'transfer',
                 paymentMethod: "InAppTransfer"
             }).save({ session });
-
+ 
             await session.commitTransaction();
 
             // Notify both parties
