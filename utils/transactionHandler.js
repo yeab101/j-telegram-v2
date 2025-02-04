@@ -212,123 +212,123 @@ const transactionHandlers = {
     },
 
     transfer: async (chatId, bot) => {
-        const session = await User.startSession();
-        try {
-            const sender = await User.findOne({ chatId }).session(session);
-            if (!sender) {
-                await bot.sendMessage(chatId, "Please register first to transfer funds.");
-                return;
-            }
+        await bot.sendMessage(chatId, "Please wait.....");
+        // const session = await User.startSession();
+        // try {
+        //     const sender = await User.findOne({ chatId }).session(session);
+        //     if (!sender) {
+        //         return;
+        //     }
 
-            // SWAPPED ORDER: PHONE FIRST THEN AMOUNT
-            const recipientPhone = await getValidInput(
-                bot,
-                chatId,
-                "Enter receivers's phone number (format: 09xxxxxxxx):",
-                (text) => /^09\d{8}$/.test(text)
-            );
+        //     // SWAPPED ORDER: PHONE FIRST THEN AMOUNT
+        //     const recipientPhone = await getValidInput(
+        //         bot,
+        //         chatId,
+        //         "Enter receivers's phone number (format: 09xxxxxxxx):",
+        //         (text) => /^09\d{8}$/.test(text)
+        //     );
 
-            // Find recipient by phone number FIRST
-            const recipient = await User.findOne({ phoneNumber: recipientPhone }).session(session);
-            if (!recipient) {
-                await bot.sendMessage(chatId, "Recipient not found. Please check the phone number and try again.");
-                return;
-            }
+        //     // Find recipient by phone number FIRST
+        //     const recipient = await User.findOne({ phoneNumber: recipientPhone }).session(session);
+        //     if (!recipient) {
+        //         await bot.sendMessage(chatId, "Recipient not found. Please check the phone number and try again.");
+        //         return;
+        //     }
 
-            // Prevent self-transfer EARLIER IN FLOW
-            if (recipient.chatId === chatId) {
-                await bot.sendMessage(chatId, "You cannot transfer to yourself.");
-                return;
-            }
+        //     // Prevent self-transfer EARLIER IN FLOW
+        //     if (recipient.chatId === chatId) {
+        //         await bot.sendMessage(chatId, "You cannot transfer to yourself.");
+        //         return;
+        //     }
 
-            // NOW GET AMOUNT AFTER RECIPIENT VERIFICATION
-            const amount = await getValidInput(
-                bot,
-                chatId,
-                "Enter amount to transfer (20 ETB - 1000 ETB):",
-                (text) => {
-                    const num = parseFloat(text);
-                    return !isNaN(num) && num >= 20 && num <= 1000;
-                }
-            );
+        //     // NOW GET AMOUNT AFTER RECIPIENT VERIFICATION
+        //     const amount = await getValidInput(
+        //         bot,
+        //         chatId,
+        //         "Enter amount to transfer (20 ETB - 1000 ETB):",
+        //         (text) => {
+        //             const num = parseFloat(text);
+        //             return !isNaN(num) && num >= 20 && num <= 1000;
+        //         }
+        //     );
 
-            // Check if sender has sufficient balance (UNCHANGED)
-            if (sender.balance < parseFloat(amount)) {
-                await bot.sendMessage(chatId, "Insufficient balance for this transfer.");
-                return;
-            }
+        //     // Check if sender has sufficient balance (UNCHANGED)
+        //     if (sender.balance < parseFloat(amount)) {
+        //         await bot.sendMessage(chatId, "Insufficient balance for this transfer.");
+        //         return;
+        //     }
 
-            // AFTER GETTING RECIPIENT PHONE NUMBER, ADD CONFIRMATION STEP
-            await session.startTransaction();
+        //     // AFTER GETTING RECIPIENT PHONE NUMBER, ADD CONFIRMATION STEP
+        //     await session.startTransaction();
 
-            // Create confirmation message
-            const confirmMessage = `⚠️ Confirm Transfer:\nAmount: ${amount} ETB\nTo: ${recipientPhone}`;
+        //     // Create confirmation message
+        //     const confirmMessage = `⚠️ Confirm Transfer:\nAmount: ${amount} ETB\nTo: ${recipientPhone}`;
 
-            // Send confirmation with buttons
-            const { message_id } = await bot.sendMessage(chatId, confirmMessage, {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: "✅ Confirm Transfer", callback_data: "confirm_transfer" }],
-                        [{ text: "❌ Cancel", callback_data: "cancel_transfer" }]
-                    ]
-                }
-            });
+        //     // Send confirmation with buttons
+        //     const { message_id } = await bot.sendMessage(chatId, confirmMessage, {
+        //         reply_markup: {
+        //             inline_keyboard: [
+        //                 [{ text: "✅ Confirm Transfer", callback_data: "confirm_transfer" }],
+        //                 [{ text: "❌ Cancel", callback_data: "cancel_transfer" }]
+        //             ]
+        //         }
+        //     });
 
-            // Wait for confirmation
-            const confirmed = await new Promise((resolve) => {
-                const handler = async (callbackQuery) => {
-                    if (callbackQuery.message.chat.id === chatId &&
-                        callbackQuery.message.message_id === message_id) {
-                        resolve(callbackQuery.data === "confirm_transfer");
-                    }
-                };
-                bot.on('callback_query', handler);
+        //     // Wait for confirmation
+        //     const confirmed = await new Promise((resolve) => {
+        //         const handler = async (callbackQuery) => {
+        //             if (callbackQuery.message.chat.id === chatId &&
+        //                 callbackQuery.message.message_id === message_id) {
+        //                 resolve(callbackQuery.data === "confirm_transfer");
+        //             }
+        //         };
+        //         bot.on('callback_query', handler);
 
-                // 2-minute timeout
-                setTimeout(() => resolve(false), 120000);
-            });
+        //         // 2-minute timeout
+        //         setTimeout(() => resolve(false), 120000);
+        //     });
 
-            if (!confirmed) {
-                await session.abortTransaction();
-                await bot.sendMessage(chatId, "❌ Transfer cancelled");
-                return;
-            }
+        //     if (!confirmed) {
+        //         await session.abortTransaction();
+        //         await bot.sendMessage(chatId, "❌ Transfer cancelled");
+        //         return;
+        //     }
 
-            // PROCEED WITH EXISTING TRANSFER LOGIC ONLY AFTER CONFIRMATION
-            // Atomic transfer operation
-            sender.balance -= parseFloat(amount);
-            recipient.balance += parseFloat(amount);
+        //     // PROCEED WITH EXISTING TRANSFER LOGIC ONLY AFTER CONFIRMATION
+        //     // Atomic transfer operation
+        //     sender.balance -= parseFloat(amount);
+        //     recipient.balance += parseFloat(amount);
 
-            await sender.save({ session });
-            await recipient.save({ session });
+        //     await sender.save({ session });
+        //     await recipient.save({ session });
 
-            const transactionId = Math.floor(Math.random() * 1000000000).toString();
+        //     const transactionId = Math.floor(Math.random() * 1000000000).toString();
 
-            await new Finance({
-                transactionId,
-                chatId,
-                recipientChatId: recipient.chatId,
-                amount: parseFloat(amount),
-                status: 'COMPLETED',
-                type: 'transfer',
-                paymentMethod: "InAppTransfer"
-            }).save({ session });
+        //     await new Finance({
+        //         transactionId,
+        //         chatId,
+        //         recipientChatId: recipient.chatId,
+        //         amount: parseFloat(amount),
+        //         status: 'COMPLETED',
+        //         type: 'transfer',
+        //         paymentMethod: "InAppTransfer"
+        //     }).save({ session });
 
-            await session.commitTransaction();
+        //     await session.commitTransaction();
 
-            // Notify both parties
-            await Promise.all([
-                bot.sendMessage(chatId, `Transfer successful!\nAmount: ${amount} ETB\nTo: ${recipientPhone}\nTransaction ID: ${transactionId}`),
-                bot.sendMessage(recipient.chatId, `You received ${amount} ETB from ${sender.phoneNumber}\nTransaction ID: ${transactionId}`)
-            ]);
+        //     // Notify both parties
+        //     await Promise.all([
+        //         bot.sendMessage(chatId, `Transfer successful!\nAmount: ${amount} ETB\nTo: ${recipientPhone}\nTransaction ID: ${transactionId}`),
+        //         bot.sendMessage(recipient.chatId, `You received ${amount} ETB from ${sender.phoneNumber}\nTransaction ID: ${transactionId}`)
+        //     ]);
 
-        } catch (error) {
-            await session.abortTransaction();
-            console.error("Transfer Error:", error);
-            await bot.sendMessage(chatId, "Error processing transfer. Please try again. /transfer");
-        } finally {
-            session.endSession();
-        }
+        // } catch (error) {
+        //     await session.abortTransaction();
+        //     console.error("Transfer Error:", error);
+        //     await bot.sendMessage(chatId, "Error processing transfer. Please try again. /transfer");
+        // } finally {
+        //     session.endSession();
+        // }
     },
 };
 
