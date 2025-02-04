@@ -22,7 +22,7 @@ const userSchema = new Schema({
     },
     bonus: {
         type: Number,
-        default: 100,
+        default: 0,
     },
     firstname: {
         type: String,
