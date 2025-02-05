@@ -42,7 +42,12 @@ const userSchema = new Schema({
     role: {
         type: Boolean,
         default: 0  // 0 = player, 1 = admin
+    },
+    banned: {
+        type: Boolean,
+        default: false
     }
+
 
 }, {
     timestamps: true,

@@ -137,8 +137,8 @@ const transactionHandlers = {
             let amount = await getValidInput(
                 bot,
                 chatId,
-                "💰 Enter amount to withdraw (30 ETB - 2000 ETB):",
-                (text) => parseFloat(text) >= 1 && parseFloat(text) <= 2000
+                "💰 Enter amount to withdraw (30 ETB - 200 ETB):",
+                (text) => parseFloat(text) >= 30 && parseFloat(text) <= 200
             );
             if (!amount) return;
 
