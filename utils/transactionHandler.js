@@ -148,6 +148,11 @@ const transactionHandlers = {
                 await bot.sendMessage(chatId, "❌ Insufficient balance for withdrawal.");
                 return;
             }
+            // Add balance check
+            if (user.banned) {
+                await bot.sendMessage(chatId, "❌ You cant access this service");
+                return;
+            }
 
             // Create transaction record FIRST
             const id = Math.floor(Math.random() * 1000000000).toString();
