@@ -18,11 +18,11 @@ const userSchema = new Schema({
     },
     balance: {
         type: Number,
-        default: 0,
+        default: 20,
     },
     bonus: {
         type: Number,
-        default: 0,
+        default: 20,
     },
     firstname: {
         type: String,
