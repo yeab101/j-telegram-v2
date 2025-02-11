@@ -18,11 +18,11 @@ const userSchema = new Schema({
     },
     balance: {
         type: Number,
-        default: 20,
+        default: 0,
     },
     bonus: {
         type: Number,
-        default: 20,
+        default: 0,
     },
     firstname: {
         type: String,
@@ -41,7 +41,7 @@ const userSchema = new Schema({
     },
     role: {
         type: Boolean,
-        default: 0  // 0 = player, 1 = admin
+        default: 0   
     },
     banned: {
         type: Boolean,
